@@ -70,6 +70,20 @@ def _resolve_weights(weights_path: str | None):
 class ICHModel:
     """Loads the checkpoint (or an untrained model in dev) and scores a volume."""
 
+    supports_gradcam = True
+
+    @property
+    def model_name(self) -> str:
+        state = " UNTRAINED" if getattr(self, "untrained", False) else ""
+        return f"RSNA-2019 ICH CNN ({_manifest_backbone()}){state}"
+
+    def score(self, three_ch: np.ndarray) -> tuple[np.ndarray, dict]:
+        """(Z,3,Y,X) → (per-slice P(any), per-subtype study-max) — backend-uniform."""
+        ss = self.score_volume(three_ch)
+        any_col = ss.per_slice[:, LABELS.index("any")]
+        subtypes = {s: round(float(ss.per_slice[:, LABELS.index(s)].max()), 4) for s in SUBTYPES}
+        return any_col, subtypes
+
     def __init__(self, weights_path: str | None = None):
         import torch
 

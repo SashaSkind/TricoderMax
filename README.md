@@ -40,10 +40,14 @@ The UI is a **FastAPI backend + one self-contained HTML page** ([ui/server.py](u
 Run the **real** pipeline on a DICOM study (real detectors + Claude):
 
 ```bash
-uv sync --extra ml --extra llm     # torch/timm + anthropic
+uv sync --extra hf --extra llm     # torch + transformers + anthropic
 # put ANTHROPIC_API_KEY in .env; drop a series into data/<uid>/
 uv run python run_study.py --study data/<StudyInstanceUID>
 ```
+
+**ICH backend** (`TRICORDER_ICH_BACKEND`):
+- `hf` (default) — real RSNA-2019 ViT from Hugging Face ([DifeiT](https://huggingface.co/DifeiT/rsna-intracranial-hemorrhage-detection), Apache-2.0), no Kaggle. Genuine open weights but weak (~0.61 acc) — reported honestly.
+- `timm` — a local RSNA-2019 CNN checkpoint at `weights/ich/ich_cnn.pth` (stronger; fetch with `scripts/fetch_ich_weights.py`), with Grad-CAM overlays.
 
 Eval (ROC/AUC + calibration): `uv run python -m eval.run_eval --demo`
 (or `--manifest data/cq500_manifest.csv` for real CQ500).

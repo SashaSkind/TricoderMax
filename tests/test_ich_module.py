@@ -14,7 +14,8 @@ import os
 import numpy as np
 import pytest
 
-# Keep the wiring test small/fast and force the untrained path.
+# Keep the wiring test small/fast, force the local timm backend + untrained path.
+os.environ["TRICORDER_ICH_BACKEND"] = "timm"
 os.environ.setdefault("TRICORDER_ICH_BACKBONE", "tf_efficientnet_b0")
 os.environ.setdefault("TRICORDER_ICH_INPUT", "96")
 os.environ["TRICORDER_ICH_ALLOW_RANDOM"] = "1"

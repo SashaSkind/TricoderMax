@@ -23,6 +23,12 @@ ml = [
     "torch>=2.1",
     "timm>=0.9",
 ]
+# Hugging Face RSNA-2019 ICH backend (real open weights, no Kaggle) — default backend.
+hf = [
+    "torch>=2.1",
+    "transformers>=4.33",
+    "huggingface_hub>=0.20",
+]
 llm = [
     "anthropic>=0.40",
 ]
