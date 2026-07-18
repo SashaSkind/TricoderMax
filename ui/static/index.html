@@ -74,18 +74,21 @@
   </div>
 
   <div id="report" class="hidden">
-    <div class="wrap" style="grid-template-columns:1fr;">
-      <div class="card">
-        <b>Post-read reporting agent</b>
-        <div class="mut" style="font-size:12px;margin:4px 0 8px;">
-          A separate agent (teammate's <code>radiologist_agent</code> package) that runs <i>after</i> the read:
-          drafts the report, detects critical findings, and closes the loop on care-team communication —
-          notify → escalate unacknowledged by phone → confirm. Bundled CTPA case (acute PE).
+    <div class="wrap" style="grid-template-columns:340px 1fr;">
+      <div>
+        <div class="card"><b>Post-read reporting agent</b>
+          <div class="mut" style="font-size:12px;margin-top:4px;">
+            Teammate's <code>radiologist_agent</code>, run <i>after</i> the read: draft report →
+            detect critical finding → notify care team → escalate unacknowledged by phone → confirm.
+            Click a patient.
+          </div>
         </div>
-        <button id="reprun" style="padding:6px 16px;background:#4a90d9;color:#fff;border:none;border-radius:6px;cursor:pointer;">Run reporting agent</button>
-        <span id="repstatus" class="mut" style="margin-left:10px;"></span>
+        <div id="replist"></div>
       </div>
-      <div id="represult"></div>
+      <div>
+        <div id="repstatus" class="mut" style="margin:0 0 8px 4px;"></div>
+        <div id="represult"><div class="card mut">Select a patient on the left.</div></div>
+      </div>
     </div>
   </div>
 
@@ -306,23 +309,38 @@ async function runReal(s){
 }
 
 /* ---- reporting agent ---- */
-async function runReport(){
-  const st = document.getElementById('repstatus'); const box = document.getElementById('represult');
-  st.textContent = '⏳ running…'; box.innerHTML='';
+let REPORT_CASES = [];
+async function loadReportCases(){
+  const box = document.getElementById('replist'); box.innerHTML = '<div class="card mut">loading…</div>';
   try{
-    const r = await fetch('/api/report');
+    const d = await (await fetch('/api/report/cases')).json();
+    REPORT_CASES = d.cases || [];
+  }catch(e){ box.innerHTML = '<div class="warn">Restart the server to load the reporting agent.</div>'; return; }
+  box.innerHTML = '';
+  for(const c of REPORT_CASES){
+    const badge = c.cached ? '<span class="tag" style="color:var(--ok)">⚡ instant</span>' : '<span class="tag">live</span>';
+    const node = el(`<div class="card study"><div class="row"><b>${c.label}</b>${badge}</div></div>`);
+    node.onclick = ()=>runReport(c);
+    box.appendChild(node);
+  }
+}
+async function runReport(c){
+  const st = document.getElementById('repstatus'); const box = document.getElementById('represult');
+  st.textContent = c.cached ? '⏳ loading…' : '⏳ running live (a few seconds)…'; box.innerHTML='';
+  try{
+    const r = await fetch('/api/report?case='+encodeURIComponent(c.id));
     if(!r.ok){ st.textContent = '❌ '+(await r.json()).detail; return; }
     const d = await r.json();
     st.textContent = `✓ backend: ${d.backend}${d.cached?' · cached':''}`;
-    const crit = (d.critical||[]).map(c=>`<div class="card" style="border-color:var(--imm)"><b style="color:var(--pos)">🚨 CRITICAL (${c.severity})</b><div style="margin-top:4px">${c.text}</div><div class="mut" style="font-size:12px;margin-top:4px">${c.rationale}</div></div>`).join('');
+    const crit = (d.critical||[]).length ? (d.critical||[]).map(x=>`<div class="card" style="border-color:var(--imm)"><b style="color:var(--pos)">🚨 CRITICAL (${x.severity})</b><div style="margin-top:4px">${x.text}</div><div class="mut" style="font-size:12px;margin-top:4px">${x.rationale}</div></div>`).join('') : '<div class="card"><b style="color:var(--ok)">🟢 No critical finding</b> — standard report, no page.</div>';
     box.innerHTML = `${crit}
       <div class="card"><b>Pipeline (detect → notify → escalate → confirm)</b>
         <pre style="max-height:340px;overflow:auto">${(d.log||'').replace(/</g,'&lt;')}</pre></div>
       <div class="card"><b>Drafted report</b>
         <pre style="max-height:340px;overflow:auto">${(d.report||'').replace(/</g,'&lt;')}</pre></div>`;
+    loadReportCases();
   }catch(e){ st.textContent = '❌ '+e; }
 }
-document.getElementById('reprun').onclick = runReport;
 
 /* ---- tabs ---- */
 document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
@@ -334,6 +352,7 @@ document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
   document.getElementById('report').classList.toggle('hidden', tab!=='report');
   document.getElementById('calib').classList.toggle('hidden', tab!=='calib');
   if(tab==='real' && !REAL_STUDIES.length) loadStudies();
+  if(tab==='report' && !REPORT_CASES.length) loadReportCases();
 });
 
 boot();

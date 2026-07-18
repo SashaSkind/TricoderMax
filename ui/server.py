@@ -207,15 +207,37 @@ def api_analyze(req: AnalyzeRequest) -> JSONResponse:
     return JSONResponse(payload)
 
 
+# Reporting-agent demo patients. "ctpa" is the package's bundled case; the head-CT
+# cases live in report_cases/ (which the triage system would have flagged upstream).
+_REPORT_CASES = {
+    "ctpa": ("Jordan Rivera · acute PE (CTPA) — CRITICAL", "case_ctpa.json"),
+    "ich_head": ("Robert Salinas · acute subdural + midline shift (head CT) — CRITICAL",
+                 str(config.REPO_ROOT / "report_cases" / "case_ich_head.json")),
+    "normal_head": ("Hana Kim · normal head CT — no critical finding",
+                    str(config.REPO_ROOT / "report_cases" / "case_normal_head.json")),
+}
+
+
+@app.get("/api/report/cases")
+def api_report_cases() -> JSONResponse:
+    return JSONResponse({"cases": [
+        {"id": cid, "label": label, "cached": (config.ARTIFACTS_DIR / f"_report_{cid}.json").exists()}
+        for cid, (label, _) in _REPORT_CASES.items()
+    ]})
+
+
 @app.get("/api/report")
-def api_report() -> JSONResponse:
-    """Run the (teammate's) radiologist reporting agent on its bundled CTPA case:
+def api_report(case: str = "ctpa") -> JSONResponse:
+    """Run the (teammate's) radiologist reporting agent on a selected patient:
     draft report → detect critical finding → notify care team → escalate → confirm.
-    Cached after first run."""
+    Cached per case after first run."""
     import contextlib
     import io
 
-    cache = config.ARTIFACTS_DIR / "_reporting_agent.json"
+    if case not in _REPORT_CASES:
+        raise HTTPException(404, f"unknown case {case!r}")
+    _label, case_file = _REPORT_CASES[case]
+    cache = config.ARTIFACTS_DIR / f"_report_{case}.json"
     if cache.exists():
         payload = json.loads(cache.read_text())
         payload["cached"] = True
@@ -230,8 +252,9 @@ def api_report() -> JSONResponse:
     llm = LLM()
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
-        rep = run_workflow(load_case("case_ctpa.json"), llm=llm)
+        rep = run_workflow(load_case(case_file), llm=llm)
     payload = {
+        "case": case,
         "backend": llm.mode,
         "report": rep.render(),
         "log": buf.getvalue(),

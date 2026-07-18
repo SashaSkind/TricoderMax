@@ -1,0 +1,62 @@
+{
+  "case_id": "NCCT-2026-0718-014",
+  "patient": {
+    "mrn": "007713920",
+    "name": "Robert D. Salinas",
+    "age": 71,
+    "sex": "M",
+    "location": "Emergency Dept, Bay 4"
+  },
+  "bridge_note": {
+    "indication": "Ground-level fall on anticoagulation; new confusion. Rule out intracranial hemorrhage.",
+    "narrative": "71M on apixaban for atrial fibrillation, found down after a witnessed ground-level fall with brief loss of consciousness. GCS 13 on arrival, now 14, with a new right parietal scalp hematoma. Evaluate for acute intracranial hemorrhage."
+  },
+  "tech_sheet": {
+    "description": "CT head without contrast. Helical acquisition, 5.0 mm axial reconstructions, brain and bone windows.",
+    "contrast_agent": null,
+    "contrast_dose": null
+  },
+  "pacs": {
+    "prior_available": true,
+    "prior_description": "Comparison to CT head dated 2025-11-02, which showed age-appropriate involutional change and no acute intracranial hemorrhage."
+  },
+  "radiology_model": {
+    "template": "CT Head Without Contrast",
+    "findings": "Extra-axial spaces: Crescentic hyperdense collection along the left cerebral convexity measuring up to 11 mm, consistent with an acute subdural hematoma. Effacement of the adjacent sulci.\nVentricles/midline: Rightward midline shift of approximately 6 mm at the level of the septum pellucidum, with partial effacement of the left lateral ventricle.\nParenchyma: No large territorial infarct. Grey-white differentiation otherwise preserved.\nBone: No displaced calvarial fracture.",
+    "impression": "Acute left convexity subdural hematoma up to 11 mm with 6 mm of rightward midline shift and early left lateral ventricular effacement. Findings are new since the prior study.",
+    "flagged_findings": ["acute subdural hematoma", "midline shift", "mass effect"]
+  },
+  "radiologist_dictation": "Confirm acute left convexity subdural hematoma with 6 mm midline shift. Given anticoagulation, this warrants immediate neurosurgical notification and reversal consideration.",
+  "chart": {
+    "ordering_physician": {
+      "name": "Dr. Elena Ruiz (Emergency Medicine)",
+      "secure_message": "eruiz@securechat.hospital.org",
+      "phone": "+1-555-0161"
+    },
+    "recent_notes": [
+      {
+        "date": "2026-07-18",
+        "author": "ED triage note",
+        "primary_care_provider": {
+          "name": "Dr. Samuel Okafor (Primary Care)",
+          "secure_message": "sokafor@securechat.hospital.org",
+          "phone": "+1-555-0188"
+        }
+      }
+    ],
+    "floor_nurse": {
+      "name": "Nurse Diane Park, RN",
+      "secure_message": "dpark@securechat.hospital.org",
+      "phone": "+1-555-0195"
+    },
+    "floor_phone": "+1-555-0102"
+  },
+  "communication": {
+    "acknowledges": {
+      "ordering_physician": false,
+      "primary_care_provider": false,
+      "floor_nurse": true
+    },
+    "floor_answers_phone": true
+  }
+}

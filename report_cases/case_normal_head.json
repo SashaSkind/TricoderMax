@@ -1,0 +1,57 @@
+{
+  "case_id": "NCCT-2026-0718-022",
+  "patient": {
+    "mrn": "005240118",
+    "name": "Hana Kim",
+    "age": 29,
+    "sex": "F",
+    "location": "Emergency Dept, Bay 9"
+  },
+  "bridge_note": {
+    "indication": "Chronic headache, worse this week. No trauma. Rule out intracranial process.",
+    "narrative": "29F with a several-year history of episodic tension-type headache, presenting with a one-week flare. Neurologically intact, no trauma, no focal deficit, no red-flag features. Imaging for reassurance."
+  },
+  "tech_sheet": {
+    "description": "CT head without contrast. Helical acquisition, 5.0 mm axial reconstructions, brain and bone windows.",
+    "contrast_agent": null,
+    "contrast_dose": null
+  },
+  "pacs": {
+    "prior_available": false,
+    "prior_description": "No prior imaging available for comparison."
+  },
+  "radiology_model": {
+    "template": "CT Head Without Contrast",
+    "findings": "Parenchyma: No acute territorial infarct, mass, or hemorrhage. Normal grey-white differentiation.\nExtra-axial spaces: No extra-axial collection.\nVentricles/midline: Ventricles normal in size and configuration. No midline shift.\nBone/sinuses: No fracture. Paranasal sinuses and mastoids are clear.",
+    "impression": "No acute intracranial abnormality. No hemorrhage, mass effect, or midline shift.",
+    "flagged_findings": []
+  },
+  "radiologist_dictation": "Agree — normal non-contrast head CT. No acute intracranial process.",
+  "chart": {
+    "ordering_physician": {
+      "name": "Dr. Tomas Vega (Emergency Medicine)",
+      "secure_message": "tvega@securechat.hospital.org",
+      "phone": "+1-555-0170"
+    },
+    "recent_notes": [
+      {
+        "date": "2026-07-18",
+        "author": "ED triage note"
+      }
+    ],
+    "floor_nurse": {
+      "name": "Nurse Grace Liu, RN",
+      "secure_message": "gliu@securechat.hospital.org",
+      "phone": "+1-555-0193"
+    },
+    "floor_phone": "+1-555-0103"
+  },
+  "communication": {
+    "acknowledges": {
+      "ordering_physician": true,
+      "primary_care_provider": true,
+      "floor_nurse": true
+    },
+    "floor_answers_phone": true
+  }
+}
