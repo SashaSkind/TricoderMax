@@ -95,6 +95,8 @@ class AnalyzeRequest(BaseModel):
 # Friendly labels for known demo studies (shown in the clickable list).
 _STUDY_LABELS = {
     "CQ500-CT-10-bleed": "CQ500-CT-10 · real bleed (radiologist ICH 0.98)",
+    "CQ500-CT-103-bleed": "CQ500-CT-103 · real bleed (radiologist ICH 0.81)",
+    "CQ500-CT-101-negative": "CQ500-CT-101 · normal (radiologist ICH 0.0)",
     "SYNTH-DEMO": "Synthetic demo study (no real patient)",
 }
 

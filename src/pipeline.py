@@ -91,6 +91,8 @@ def triage_real_study(series_dir: str) -> TriageResult:
         completed_at=completed,
         total_runtime_ms=int((completed - started).total_seconds() * 1000),
     )
-    assessment = assess(panel, prior_report=ctx.prior_report, client="auto")
+    # Hot path: give Claude the volume so it can request evidence (bone window at
+    # the skull base, ROI HU stats) before deciding.
+    assessment = assess(panel, prior_report=ctx.prior_report, client="auto", volume=vol.hu, ctx=ctx)
     decision = decide(panel, assessment)
     return TriageResult(panel=panel, assessment=assessment, decision=decision)

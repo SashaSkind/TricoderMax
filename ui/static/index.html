@@ -166,7 +166,7 @@ function renderDetail(){
       <div class="mut">${s.study_type} · age ${s.age??'?'} · ${s.sex??'?'} · <i>${s.indication}</i></div>
       <div style="margin-top:8px"><b>Summary:</b> ${s.summary}</div>
       <div class="mut" style="font-size:12px">ranking source: ${s.assessment_source}</div>
-      ${s.caveats.map(x=>`<div class="warn">${x}</div>`).join('')}
+      ${s.caveats.length ? `<details style="margin-top:6px"><summary class="mut" style="font-size:12px">${s.caveats.length} caveats</summary>${s.caveats.map(x=>`<div class="mut" style="font-size:12px;margin-top:4px">• ${x}</div>`).join('')}</details>` : ''}
     </div>
     <h4 style="margin:6px 4px">Detector panel</h4>
     ${s.results.map(findingCard).join('')}
@@ -273,11 +273,13 @@ async function runReal(s){
     const d = await r.json();
     st.textContent = `✓ ${d.accession} · ${d.study_type} · ${d.n_slices} slices${d.cached?' · cached':''}`;
     const c = BAND[d.decision.band]||'var(--rou)';
+    const cav = d.assessment.caveats||[];
+    const cavHtml = cav.length ? `<details style="margin-top:8px"><summary class="mut" style="font-size:12px">${cav.length} caveats</summary>${cav.map(x=>`<div class="mut" style="font-size:12px;margin-top:4px">• ${x}</div>`).join('')}</details>` : '';
     box.innerHTML = `
       <div class="card">
         <span class="badge" style="background:${c}">${d.decision.action.toUpperCase()} · ${d.decision.band} · ${d.decision.score.toFixed(2)}</span>
-        <div style="margin-top:8px"><b>Claude (${d.assessment.source}):</b> ${d.assessment.summary}</div>
-        ${(d.assessment.caveats||[]).map(x=>`<div class="warn">${x}</div>`).join('')}
+        <div style="margin-top:8px"><b>Claude assessment:</b> ${d.assessment.summary}</div>
+        ${cavHtml}
       </div>
       ${moduleBlock('Intracranial hemorrhage', d.ich)}
       ${moduleBlock('Midline shift', d.midline)}`;

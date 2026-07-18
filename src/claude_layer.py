@@ -201,17 +201,20 @@ def _default_client():
     return anthropic.Anthropic(api_key=key)
 
 
+_RECORD_TOOL = {
+    "name": "record_assessment",
+    "description": "Record the final triage priority assessment.",
+    "input_schema": _tool_schema(),
+}
+
+
 def _call_claude(client, panel: PanelOutput, prior_report: Optional[str]) -> dict:
-    tool = {
-        "name": "record_assessment",
-        "description": "Record the triage priority assessment.",
-        "input_schema": _tool_schema(),
-    }
+    """Single-shot: force the assessment tool immediately (no evidence requests)."""
     resp = client.messages.create(
         model=config.CLAUDE_MODEL,
         max_tokens=1024,
         system=_SYSTEM,
-        tools=[tool],
+        tools=[_RECORD_TOOL],
         tool_choice={"type": "tool", "name": "record_assessment"},
         messages=_build_messages(panel, prior_report),
     )
@@ -221,17 +224,83 @@ def _call_claude(client, panel: PanelOutput, prior_report: Optional[str]) -> dic
     raise ValueError("no record_assessment tool_use block in response")
 
 
+def _serialize(content) -> list[dict]:
+    """Anthropic response blocks → message-content dicts for the next turn."""
+    out = []
+    for b in content:
+        t = getattr(b, "type", None)
+        if t == "text":
+            out.append({"type": "text", "text": b.text})
+        elif t == "tool_use":
+            out.append({"type": "tool_use", "id": b.id, "name": b.name, "input": b.input})
+    return out
+
+
+def _call_claude_agentic(client, panel, prior_report, volume, ctx, max_tools=3, timeout_s=90) -> dict:
+    """Hot path: Claude may request evidence (get_slices / measure_roi / fetch_prior)
+    up to `max_tools` times, then records its assessment. Bounded + monotonic."""
+    import time
+
+    from src.claude_tools import TOOL_DEFS, handle_tool
+
+    tools = TOOL_DEFS + [_RECORD_TOOL]
+    messages = _build_messages(panel, prior_report)
+    slog = log.bind(accession=panel.study.accession)
+    start = time.time()
+    used = 0
+
+    for _ in range(max_tools + 1):
+        force = used >= max_tools or (time.time() - start) > timeout_s
+        kwargs = dict(model=config.CLAUDE_MODEL, max_tokens=1024, system=_SYSTEM, tools=tools, messages=messages)
+        if force:
+            kwargs["tool_choice"] = {"type": "tool", "name": "record_assessment"}
+        resp = client.messages.create(**kwargs)
+        tool_uses = [b for b in resp.content if getattr(b, "type", None) == "tool_use"]
+        rec = next((b for b in tool_uses if b.name == "record_assessment"), None)
+        if rec:
+            if used:
+                slog.info("claude.tools_used", n=used)
+            return dict(rec.input)
+        messages.append({"role": "assistant", "content": _serialize(resp.content)})
+        if not tool_uses:  # text only — nudge toward a decision on the next turn
+            messages.append({"role": "user", "content": [{"type": "text", "text": "Record your assessment now."}]})
+            continue
+        results = []
+        for tu in tool_uses:
+            out = handle_tool(tu.name, dict(tu.input), volume, ctx)
+            results.append({"type": "tool_result", "tool_use_id": tu.id, "content": out})
+            used += 1
+            slog.info("claude.tool_call", tool=tu.name)
+        messages.append({"role": "user", "content": results})
+    raise ValueError("no record_assessment after tool loop")
+
+
 # ── entry point ──────────────────────────────────────────────────────────────
-def assess(panel: PanelOutput, prior_report: Optional[str] = None, client: Any = "auto") -> ClaudeAssessment:
-    """Reconcile + rank. Falls back to detector-only on any failure or abstain."""
+def assess(
+    panel: PanelOutput,
+    prior_report: Optional[str] = None,
+    client: Any = "auto",
+    volume=None,
+    ctx=None,
+) -> ClaudeAssessment:
+    """Reconcile + rank. Falls back to detector-only on any failure or abstain.
+
+    If a `volume` is supplied and tools are enabled, Claude runs on the HOT PATH:
+    it may request evidence (get_slices/measure_roi/fetch_prior, bounded) before
+    deciding. Otherwise it's a single-shot structured call.
+    """
     if client == "auto":
         client = _default_client()
     if client is None:
         return detector_only_assessment(panel)
 
+    tools_on = volume is not None and os.getenv("TRICORDER_CLAUDE_TOOLS", "1").strip() not in ("0", "false", "False")
     slog = log.bind(accession=panel.study.accession)
     try:
-        raw = _call_claude(client, panel, prior_report)
+        if tools_on:
+            raw = _call_claude_agentic(client, panel, prior_report, volume, ctx)
+        else:
+            raw = _call_claude(client, panel, prior_report)
         assessment = ClaudeAssessment(**raw, source="claude")
     except (ValidationError, ValueError, KeyError) as e:
         slog.warning("claude.parse_failed", err=str(e))

@@ -43,6 +43,46 @@ class _FakeClient:
         self.messages = SimpleNamespace(create=lambda **kw: resp)
 
 
+class _ScriptedClient:
+    """Returns a scripted sequence of responses across successive create() calls."""
+
+    def __init__(self, script):
+        self.script, self.i = script, 0
+        self.messages = SimpleNamespace(create=self._create)
+
+    def _create(self, **kw):
+        r = self.script[min(self.i, len(self.script) - 1)]
+        self.i += 1
+        return SimpleNamespace(content=r)
+
+
+def _tooluse(name, inp, tid="t1"):
+    return SimpleNamespace(type="tool_use", name=name, input=inp, id=tid)
+
+
+def test_hot_path_tool_loop_executes_then_records():
+    """Claude requests a bone-window slice, then records — the loop runs the tool
+    and returns the parsed assessment."""
+    import numpy as np
+
+    from src.contract import StudyContext
+
+    panel = _panel([_ich(0.9)])
+    ctx = StudyContext(accession="C-1", study_uid="1", n_slices=16)
+    vol = np.random.default_rng(0).normal(30, 20, size=(16, 64, 64)).astype(np.float32)
+    payload = {
+        "priority_score": 0.8, "priority_band": "immediate",
+        "verification": [{"module_id": "ich_v1", "supported": True, "reasoning": "confirmed on bone window", "confidence_adjustment": 0.0}],
+        "summary": "Acute ICH.", "caveats": [], "abstain": False,
+    }
+    script = [
+        [_tooluse("get_slices", {"start": 8, "end": 8, "window": "bone"})],  # request evidence
+        [_tooluse("record_assessment", payload)],                            # then decide
+    ]
+    a = assess(panel, client=_ScriptedClient(script), volume=vol, ctx=ctx)
+    assert a.source == "claude" and a.priority_band == "immediate"
+
+
 def test_no_client_uses_detector_only_fallback():
     panel = _panel([_ich(0.9)])
     a = assess(panel, client=None)
