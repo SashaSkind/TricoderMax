@@ -114,6 +114,8 @@ def read_study_context(series_dir: str, accession: str | None = None) -> StudyCo
     n = len(_series_files(series_dir))
     sex = str(getattr(ref, "PatientSex", "") or "").upper()[:1]
     sex = sex if sex in ("M", "F") else ("O" if sex else None)
+    ps = getattr(ref, "PixelSpacing", [1.0, 1.0])
+    ps_y, ps_x = (float(ps[0]), float(ps[1])) if len(ps) == 2 else (1.0, 1.0)
     return StudyContext(
         accession=accession or str(getattr(ref, "AccessionNumber", "") or series_dir),
         study_uid=str(getattr(ref, "StudyInstanceUID", "")),
@@ -128,5 +130,7 @@ def read_study_context(series_dir: str, accession: str | None = None) -> StudyCo
             "StudyDescription": str(getattr(ref, "StudyDescription", "") or ""),
             "ProtocolName": str(getattr(ref, "ProtocolName", "") or ""),
             "ContrastBolusAgent": str(getattr(ref, "ContrastBolusAgent", "") or ""),
+            "PixelSpacingY": str(ps_y),
+            "PixelSpacingX": str(ps_x),
         },
     )
