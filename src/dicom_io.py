@@ -116,9 +116,15 @@ def read_study_context(series_dir: str, accession: str | None = None) -> StudyCo
     sex = sex if sex in ("M", "F") else ("O" if sex else None)
     ps = getattr(ref, "PixelSpacing", [1.0, 1.0])
     ps_y, ps_x = (float(ps[0]), float(ps[1])) if len(ps) == 2 else (1.0, 1.0)
-    # Filesystem-safe accession (used in artifact paths/URLs) — no slashes/dots.
-    raw_acc = str(getattr(ref, "AccessionNumber", "") or "").strip() or os.path.basename(
-        series_dir.rstrip("/")
+    # Filesystem-safe, UNIQUE accession (used in artifact paths/URLs). Generic
+    # series folder names ("series", "thin") collide across studies, so fall back
+    # to <study-folder>-<series-folder> (unique per study) then StudyInstanceUID.
+    d = series_dir.rstrip("/")
+    parent, base = os.path.basename(os.path.dirname(d)), os.path.basename(d)
+    raw_acc = (
+        str(getattr(ref, "AccessionNumber", "") or "").strip()
+        or (f"{parent}-{base}" if parent else base)
+        or str(getattr(ref, "StudyInstanceUID", "study"))
     )
     fallback_acc = "".join(c for c in raw_acc if c.isalnum() or c in "-_").lstrip("-_") or "study"
     return StudyContext(
