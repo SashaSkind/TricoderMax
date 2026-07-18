@@ -6,7 +6,8 @@ requires-python = ">=3.11"
 dependencies = [
     "pydantic>=2.6",
     "numpy>=1.26",
-    "streamlit>=1.33",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
     "structlog>=24.1",
     "pydicom>=2.4",
     "SimpleITK>=2.3",

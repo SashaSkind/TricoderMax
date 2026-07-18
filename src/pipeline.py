@@ -17,6 +17,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from src import config
 from src.claude_layer import ClaudeAssessment, assess
 from src.contract import PanelOutput, StudyContext
 from src.orchestrator import run_panel
@@ -41,7 +42,10 @@ class TriageResult:
 
 def triage_study(ctx: StudyContext, volume: np.ndarray) -> TriageResult:
     panel = run_panel(ctx, volume)
-    assessment = assess(panel, prior_report=ctx.prior_report)
+    # Mock panels never go to the real Claude API (pointless + costs money); they
+    # use the deterministic fallback. Real detector runs (USE_MOCKS=0) invoke Claude.
+    client = None if config.USE_MOCKS else "auto"
+    assessment = assess(panel, prior_report=ctx.prior_report, client=client)
     decision = decide(panel, assessment)
     return TriageResult(panel=panel, assessment=assessment, decision=decision)
 

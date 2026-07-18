@@ -26,13 +26,16 @@ def roc_curve(scores: np.ndarray, labels: np.ndarray) -> ROC:
     P = int((labels == 1).sum())
     N = int((labels == 0).sum())
     if P == 0 or N == 0:
-        return ROC([0.0, 1.0], [0.0, 1.0], [float("inf"), float("-inf")], float("nan"))
+        hi = float(scores.max()) + 1.0 if scores.size else 1.0
+        return ROC([0.0, 1.0], [0.0, 1.0], [hi, float(scores.min()) if scores.size else 0.0], 0.5)
 
     order = np.argsort(-scores)
     s = scores[order]
     y = labels[order]
     tp = fp = 0
-    fpr, tpr, thr = [0.0], [0.0], [float("inf")]
+    # Finite sentinel above the max score = "classify nothing positive" (0,0 point);
+    # keeps the ROC JSON-serializable (no inf).
+    fpr, tpr, thr = [0.0], [0.0], [float(s[0]) + 1.0]
     i = 0
     n = len(s)
     while i < n:

@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tricorder — head-CT triage</title>
+<style>
+  :root { --bg:#0f1216; --panel:#171b21; --line:#262c35; --txt:#e6e9ee; --mut:#8a94a3;
+          --imm:#c0392b; --urg:#d68910; --rou:#5d6d7e; --pos:#e05c5c; --ok:#48b16a; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--txt); }
+  .banner { background:#7b241c; color:#fff; font-weight:700; padding:10px 16px; letter-spacing:.3px; }
+  .sub { color:var(--mut); padding:6px 16px; font-size:12px; }
+  header h1 { margin:8px 16px 0; font-size:20px; }
+  .tabs { display:flex; gap:4px; padding:8px 16px 0; border-bottom:1px solid var(--line); }
+  .tab { padding:8px 14px; cursor:pointer; color:var(--mut); border:1px solid transparent; border-bottom:none; border-radius:6px 6px 0 0; }
+  .tab.active { color:var(--txt); background:var(--panel); border-color:var(--line); }
+  .wrap { display:grid; grid-template-columns:380px 1fr; gap:16px; padding:16px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px; margin-bottom:10px; }
+  .study { cursor:pointer; }
+  .study:hover { border-color:#3a4656; }
+  .study.sel { border-color:#4a90d9; }
+  .badge { display:inline-block; padding:2px 8px; border-radius:4px; font-size:12px; font-weight:700; color:#fff; }
+  .bar { height:4px; border-radius:2px; margin-top:8px; }
+  .row { display:flex; justify-content:space-between; gap:8px; }
+  .mut { color:var(--mut); }
+  .tag { font-size:11px; padding:1px 6px; border-radius:3px; border:1px solid var(--line); margin-left:6px; }
+  .kv { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin:8px 0; }
+  .kv div b { display:block; font-size:16px; }
+  .kv div span { font-size:11px; color:var(--mut); }
+  details { margin-top:8px; } summary { cursor:pointer; color:var(--mut); }
+  pre { white-space:pre-wrap; font-size:12px; color:var(--mut); }
+  .warn { background:#3a2e12; border:1px solid #6b5316; color:#f0d089; padding:6px 10px; border-radius:6px; margin:6px 0; font-size:12px; }
+  select, input[type=range] { width:100%; }
+  .hidden { display:none; }
+  svg text { fill:var(--mut); font-size:10px; }
+</style>
+</head>
+<body>
+  <div class="banner">⚠️ RESEARCH PROTOTYPE — NON-DIAGNOSTIC · PRIORITIZATION ONLY · NEVER REMOVES A STUDY FROM THE READING QUEUE</div>
+  <div class="sub" id="license"></div>
+  <header><h1>🩺 Tricorder — head-CT triage</h1></header>
+  <div class="tabs">
+    <div class="tab active" data-tab="work">Worklist</div>
+    <div class="tab" data-tab="calib">Calibration / operating point</div>
+  </div>
+
+  <div id="work">
+    <div class="sub" id="worksummary"></div>
+    <div class="wrap">
+      <div id="list"></div>
+      <div id="detail"><div class="card mut">Select a study.</div></div>
+    </div>
+  </div>
+
+  <div id="calib" class="hidden">
+    <div class="wrap" style="grid-template-columns:340px 1fr;">
+      <div class="card">
+        <label class="mut">Module</label>
+        <select id="mod"></select>
+        <div id="calmeta" class="mut" style="margin:8px 0;"></div>
+        <label class="mut">Operating threshold: <span id="thrval"></span></label>
+        <input type="range" id="thr" min="0" max="1" step="0.01" />
+        <div class="kv" style="grid-template-columns:repeat(3,1fr);">
+          <div><b id="auc">–</b><span>AUC</span></div>
+          <div><b id="sens">–</b><span>sensitivity</span></div>
+          <div><b id="spec">–</b><span>specificity</span></div>
+        </div>
+        <div class="mut" style="font-size:12px;">Lowering the threshold catches more (higher sensitivity) at the cost of more pages (lower specificity). The study stays in the queue at any threshold.</div>
+      </div>
+      <div class="card"><svg id="roc" viewBox="0 0 320 320" width="360" height="360"></svg></div>
+    </div>
+  </div>
+
+<script>
+const BAND = {immediate:'var(--imm)', urgent:'var(--urg)', routine:'var(--rou)'};
+let STUDIES = [], SEL = null, CALIB = {};
+
+function el(h){ const d=document.createElement('div'); d.innerHTML=h.trim(); return d.firstChild; }
+
+async function boot(){
+  const w = await (await fetch('/api/worklist')).json();
+  document.getElementById('license').textContent = w.license;
+  STUDIES = w.studies;
+  const paged = STUDIES.filter(s=>s.action==='page').length;
+  document.getElementById('worksummary').textContent =
+    `${STUDIES.length} studies · ${paged} paged · every study remains in the reading queue.`;
+  renderList(); SEL = STUDIES[0]?.accession; renderDetail();
+  CALIB = await (await fetch('/api/calibration')).json();
+  initCalib();
+}
+
+function renderList(){
+  const box = document.getElementById('list'); box.innerHTML='';
+  for(const s of STUDIES){
+    const c = BAND[s.band]||'var(--rou)';
+    const flags = (s.n_failed?` · ⚠${s.n_failed} failed`:'') + (s.superset?' · superset':'');
+    const node = el(`<div class="card study ${s.accession===SEL?'sel':''}">
+      <div class="row"><b>#${s.rank} · ${s.accession}</b>
+      <span class="badge" style="background:${s.action==='page'?'var(--imm)':'var(--rou)'}">${s.action==='page'?'PAGE':'reorder'}</span></div>
+      <div class="mut">${s.band} · score ${s.score.toFixed(2)}${flags}</div>
+      <div class="bar" style="background:${c}"></div></div>`);
+    node.onclick = ()=>{ SEL=s.accession; renderList(); renderDetail(); };
+    box.appendChild(node);
+  }
+}
+
+function findingCard(m){
+  let tags='';
+  if(m.status!=='ok') tags+=`<span class="tag" style="color:var(--pos)">🚫 ${m.status}</span>`;
+  else if(m.positive) tags+=`<span class="tag" style="color:var(--pos)">🔴 POSITIVE</span>`;
+  else tags+=`<span class="tag" style="color:var(--ok)">🟢 negative</span>`;
+  if(m.approximation) tags+=`<span class="tag">≈ approximation</span>`;
+  if(!m.calibration && m.status==='ok') tags+=`<span class="tag">⚠ uncalibrated</span>`;
+  const val = m.value==null?'—':`${m.value}${m.units?(' '+m.units):''}`;
+  const prov = m.calibration
+    ? `${m.calibration.metric.toUpperCase()}=${m.calibration.metric_value} on ${m.calibration.eval_dataset} (n=${m.calibration.n})`
+    : 'uncalibrated — threshold not yet evaluated';
+  const overlays = (m.evidence.overlay_paths||[]).map(p=>{
+    const parts = p.split('/'); const name=parts.pop();
+    return `<img src="/api/artifact/${SEL}/${name}" style="max-width:160px;border:1px solid var(--line);border-radius:4px;margin:4px 4px 0 0;">`;
+  }).join('');
+  return `<div class="card">
+    <div class="row"><b>${m.finding_class}</b><span class="mut">${m.module_id} v${m.module_version}</span></div>
+    <div>${tags}</div>
+    <div class="kv">
+      <div><b>${val}</b><span>value</span></div>
+      <div><b>${m.threshold==null?'—':m.threshold}</b><span>threshold</span></div>
+      <div><b>${m.runtime_ms} ms</b><span>runtime</span></div>
+      <div><b style="font-size:11px">${prov}</b><span>provenance</span></div>
+    </div>
+    ${m.status==='failed'?`<div class="warn">error: ${m.error||''}</div>`:''}
+    ${m.evidence.slice_indices?.length?`<div class="mut" style="font-size:12px">evidence slices: [${m.evidence.slice_indices}] ${m.evidence.note||''}</div>`:''}
+    ${overlays?`<div>${overlays}</div>`:''}
+  </div>`;
+}
+
+function renderDetail(){
+  const s = STUDIES.find(x=>x.accession===SEL);
+  const box = document.getElementById('detail');
+  if(!s){ box.innerHTML='<div class="card mut">Select a study.</div>'; return; }
+  const c = BAND[s.band]||'var(--rou)';
+  box.innerHTML = `
+    <div class="card">
+      <div class="row"><h3 style="margin:0">Study ${s.accession}</h3>
+      <span class="badge" style="background:${c}">${s.action.toUpperCase()} · ${s.band} · ${s.score.toFixed(2)}</span></div>
+      <div class="mut">${s.study_type} · age ${s.age??'?'} · ${s.sex??'?'} · <i>${s.indication}</i></div>
+      <div style="margin-top:8px"><b>Summary:</b> ${s.summary}</div>
+      <div class="mut" style="font-size:12px">ranking source: ${s.assessment_source}</div>
+      ${s.caveats.map(x=>`<div class="warn">${x}</div>`).join('')}
+    </div>
+    <h4 style="margin:6px 4px">Detector panel</h4>
+    ${s.results.map(findingCard).join('')}
+    <div class="card"><details><summary>Policy audit trail</summary>
+      <div style="margin-top:6px"><b>Routing:</b> ${s.routing_reason}</div>
+      <div><b>Decision:</b> ${s.reason}</div>
+      <pre>${s.audit.map(a=>'• '+a).join('\n')}</pre>
+    </details></div>`;
+}
+
+/* ---- calibration ---- */
+function initCalib(){
+  const sel = document.getElementById('mod'); sel.innerHTML='';
+  const mods = Object.keys(CALIB);
+  if(!mods.length){ document.getElementById('calmeta').textContent='No eval results. Run: uv run python -m eval.run_eval --demo'; return; }
+  for(const m of mods) sel.appendChild(el(`<option value="${m}">${m}</option>`));
+  sel.onchange = drawCalib;
+  const thr = document.getElementById('thr');
+  thr.oninput = drawCalib;
+  drawCalib();
+}
+function opPoint(r, thr){
+  const th=r.thresholds; let idx=0;
+  for(let i=0;i<th.length;i++){ if(th[i]>=thr) idx=i; }
+  return {fpr:r.fpr[idx], tpr:r.tpr[idx], sens:r.tpr[idx], spec:1-r.fpr[idx]};
+}
+function drawCalib(){
+  const m = document.getElementById('mod').value; const r = CALIB[m]; if(!r) return;
+  const thr = document.getElementById('thr');
+  thr.max = Math.max(1, r.threshold*2); thr.step = thr.max>2 ? 0.1 : 0.01;
+  if(thr.value===''||thr.dataset.mod!==m){ thr.value=r.threshold; thr.dataset.mod=m; }
+  document.getElementById('thrval').textContent = (+thr.value).toFixed(2);
+  document.getElementById('calmeta').innerHTML =
+    `Evaluated on <b>${r.dataset}</b> (n=${r.n}). ` +
+    (r.dataset.includes('SYNTH') ? '⚠️ synthetic demo cohort — not real CQ500 numbers.' : 'External metric.');
+  const op = opPoint(r, +thr.value);
+  document.getElementById('auc').textContent = r.auc;
+  document.getElementById('sens').textContent = op.sens.toFixed(2);
+  document.getElementById('spec').textContent = op.spec.toFixed(2);
+  drawROC(r, op);
+}
+function drawROC(r, op){
+  const S=320, P=30, W=S-2*P;
+  const X=v=>P+v*W, Y=v=>S-P-v*W;
+  const pts = r.fpr.map((f,i)=>`${X(f)},${Y(r.tpr[i])}`).join(' ');
+  const svg = document.getElementById('roc');
+  svg.innerHTML = `
+    <rect x="${P}" y="${P}" width="${W}" height="${W}" fill="none" stroke="var(--line)"/>
+    <line x1="${P}" y1="${S-P}" x2="${S-P}" y2="${P}" stroke="var(--line)" stroke-dasharray="4"/>
+    <polyline points="${pts}" fill="none" stroke="#4a90d9" stroke-width="2"/>
+    <circle cx="${X(op.fpr)}" cy="${Y(op.tpr)}" r="5" fill="var(--imm)"/>
+    <text x="${P}" y="${S-8}">FPR (1−specificity)</text>
+    <text x="6" y="${P+4}" transform="rotate(-90 6,${P+4})">TPR (sensitivity)</text>
+    <text x="${X(op.fpr)+8}" y="${Y(op.tpr)}">AUC=${r.auc}</text>`;
+}
+
+/* ---- tabs ---- */
+document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  t.classList.add('active');
+  const tab=t.dataset.tab;
+  document.getElementById('work').classList.toggle('hidden', tab!=='work');
+  document.getElementById('calib').classList.toggle('hidden', tab!=='calib');
+});
+
+boot();
+</script>
+</body>
+</html>

@@ -29,12 +29,24 @@ Report the **external** (CQ500) metric everywhere; never the internal one alone.
 ## Quick start
 
 ```bash
-uv sync                       # or: uv pip install -e ".[dev]"
-uv run streamlit run ui/app.py    # Phase-0 worklist runs on mock modules, no ML
-uv run pytest                 # contract + orchestrator + policy tests
+uv sync                            # core deps
+uv run uvicorn ui.server:app --port 8000   # web UI on mock modules → http://localhost:8000
+uv run pytest                      # contract + orchestrator + policy + server tests
 ```
 
-Install the ML extra (`uv sync --extra ml`) only for the real ICH module (Phase 2).
+The UI is a **FastAPI backend + one self-contained HTML page** ([ui/server.py](ui/server.py),
+[ui/static/index.html](ui/static/index.html)) — a thin viewer over the pipeline, not the product.
+
+Run the **real** pipeline on a DICOM study (real detectors + Claude):
+
+```bash
+uv sync --extra ml --extra llm     # torch/timm + anthropic
+# put ANTHROPIC_API_KEY in .env; drop a series into data/<uid>/
+uv run python run_study.py --study data/<StudyInstanceUID>
+```
+
+Eval (ROC/AUC + calibration): `uv run python -m eval.run_eval --demo`
+(or `--manifest data/cq500_manifest.csv` for real CQ500).
 
 ## Architecture
 
