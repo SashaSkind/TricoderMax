@@ -21,6 +21,9 @@ ml = [
     "torch>=2.1",
     "timm>=0.9",
 ]
+llm = [
+    "anthropic>=0.40",
+]
 dev = [
     "pytest>=8.0",
 ]
