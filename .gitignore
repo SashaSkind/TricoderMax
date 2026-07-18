@@ -17,9 +17,6 @@ __pycache__/
 .uv/
 uv.lock
 
-# Stray empty nested git repo (not part of this project)
-TricoderMax/
-
 # OS / editor
 .DS_Store
 .idea/
