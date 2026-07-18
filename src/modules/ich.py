@@ -87,16 +87,24 @@ class ICHModule(Module):
         return self.desc.finding_class.value == "intracranial_hemorrhage" and ctx.modality.upper() == "CT"
 
     def run(self, volume: np.ndarray, ctx) -> ModuleResult:
+        import time
+
         with timed() as t:
-            model = _get_model()
+            _t0 = time.time()
+            model = _get_model()  # first call loads the checkpoint
+            load_ms = int((time.time() - _t0) * 1000)
             three_ch = three_channel(volume)  # (Z,3,Y,X)
 
+            _t1 = time.time()
             per_slice_any, subtypes = model.score(three_ch)
+            infer_ms = int((time.time() - _t1) * 1000)
+            n = int(three_ch.shape[0])
+            timing = f"load={load_ms}ms inference={infer_ms}ms ({infer_ms/max(1,n):.0f}ms/slice, {n} slices)"
             study_any = float(np.quantile(per_slice_any, 0.98)) if per_slice_any.size else 0.0
             top_slices = np.argsort(-per_slice_any)[:3].astype(int).tolist()
 
             overlays: list[str] = []
-            note_bits = [f"backend={_BACKEND}"]
+            note_bits = [f"backend={_BACKEND}", timing]
             if getattr(model, "supports_gradcam", False) and not os.getenv("TRICORDER_ICH_NO_OVERLAY"):
                 # A heatmap failure must never sink the detection — keep the score.
                 try:
