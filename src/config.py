@@ -11,6 +11,16 @@ import os
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+# Load .env (repo root) so ANTHROPIC_API_KEY etc. are available without exporting.
+# Real shell env still wins over the file.
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(REPO_ROOT / ".env", override=False)
+except ImportError:
+    pass
+
 DATA_DIR = Path(os.getenv("TRICORDER_DATA", REPO_ROOT / "data"))
 ARTIFACTS_DIR = Path(os.getenv("TRICORDER_ARTIFACTS", REPO_ROOT / "artifacts"))
 WEIGHTS_DIR = Path(os.getenv("TRICORDER_WEIGHTS", REPO_ROOT / "weights"))

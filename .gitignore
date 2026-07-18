@@ -21,6 +21,11 @@ __pycache__/
 .uv/
 uv.lock
 
+# Secrets / local env — NEVER commit
+.env
+.env.*
+!.env.example
+
 # OS / editor
 .DS_Store
 .idea/
