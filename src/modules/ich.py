@@ -26,13 +26,31 @@ from src.modules.base import Module, timed
 from src.windowing import three_channel, to_uint8, window_named
 
 _MODEL = None  # process-wide cache; the checkpoint loads once
-_BACKEND = os.getenv("TRICORDER_ICH_BACKEND", "hf")
+
+
+def _default_backend() -> str:
+    """convnext if its checkpoint is present (strongest), else hf (no download)."""
+    from src import config
+
+    override = os.getenv("TRICORDER_ICH_BACKEND", "").strip()
+    if override:
+        return override
+    ckpt = os.getenv("TRICORDER_ICH_CONVNEXT", "ConvNeXt_V2_Model.pth")
+    ckpt_path = ckpt if os.path.isabs(ckpt) else str(config.REPO_ROOT / ckpt)
+    return "convnext" if os.path.exists(ckpt_path) else "hf"
+
+
+_BACKEND = _default_backend()
 
 
 def _get_model():
     global _MODEL
     if _MODEL is None:
-        if _BACKEND == "hf":
+        if _BACKEND == "convnext":
+            from src.modules.ich_convnext import ConvNeXtICHModel
+
+            _MODEL = ConvNeXtICHModel()
+        elif _BACKEND == "hf":
             from src.modules.ich_hf import HFICHModel
 
             _MODEL = HFICHModel()
