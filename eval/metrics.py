@@ -55,6 +55,32 @@ def roc_curve(scores: np.ndarray, labels: np.ndarray) -> ROC:
     return ROC(fpr, tpr, thr, round(auc, 4))
 
 
+def precision_at_recall(scores: np.ndarray, labels: np.ndarray, target_recall: float) -> tuple[float, float]:
+    """Highest precision achievable at >= target_recall. Returns (precision, threshold).
+
+    Sweeps every score as a threshold, keeps operating points meeting the recall
+    floor, and returns the most precise one. This is how we compare 'detector alone'
+    vs 'detector + Claude adjustment' at a fixed recall (the verification-value test).
+    """
+    scores = np.asarray(scores, dtype=float)
+    labels = np.asarray(labels, dtype=int)
+    P = int((labels == 1).sum())
+    if P == 0:
+        return float("nan"), float("nan")
+    best_prec, best_thr = 0.0, float("inf")
+    for thr in np.unique(scores):
+        pred = scores >= thr
+        tp = int((pred & (labels == 1)).sum())
+        recall = tp / P
+        if recall < target_recall:
+            continue
+        pp = int(pred.sum())
+        prec = tp / pp if pp else 0.0
+        if prec > best_prec:
+            best_prec, best_thr = prec, float(thr)
+    return round(best_prec, 4), best_thr
+
+
 def sens_spec_at(scores: np.ndarray, labels: np.ndarray, threshold: float) -> tuple[float, float]:
     """Sensitivity and specificity at a decision threshold (positive iff >= threshold)."""
     scores = np.asarray(scores, dtype=float)

@@ -36,6 +36,26 @@ def test_auc_monotone_with_signal():
     assert roc_curve(strong, y).auc > roc_curve(weak, y).auc
 
 
+def test_precision_at_recall():
+    import numpy as np
+
+    from eval.metrics import precision_at_recall
+
+    s = np.array([0.1, 0.2, 0.8, 0.9])
+    y = np.array([0, 0, 1, 1])
+    prec, _ = precision_at_recall(s, y, 1.0)
+    assert prec == 1.0
+
+
+def test_verification_eval_demo_shows_improvement():
+    """Claude's down-weights should raise precision at fixed recall on the demo."""
+    from eval.verification_eval import demo
+
+    res = demo(recall=0.9)
+    assert res["precision_with_claude"] > res["precision_detector"]
+    assert res["delta"] > 0
+
+
 def test_router_eval_accuracy_reasonable():
     res = run_router_eval()
     assert res["n"] >= 20
