@@ -1,0 +1,37 @@
+[project]
+name = "tricorder"
+version = "0.1.0"
+description = "Head-CT critical-finding triage prototype (prioritization, not diagnosis)"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.6",
+    "numpy>=1.26",
+    "streamlit>=1.33",
+    "structlog>=24.1",
+    "pydicom>=2.4",
+    "SimpleITK>=2.3",
+    "pillow>=10.0",
+    "scipy>=1.11",
+    "matplotlib>=3.8",
+]
+
+[project.optional-dependencies]
+# Heavy — only needed for the real ICH module (Phase 2). Phases 0/1/4 run without it.
+ml = [
+    "torch>=2.1",
+    "timm>=0.9",
+]
+dev = [
+    "pytest>=8.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

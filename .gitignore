@@ -1,0 +1,26 @@
+# Imaging data & derived pixel artifacts — NEVER commit (non-commercial licenses)
+data/
+artifacts/
+
+# Model weights
+weights/
+*.pth
+*.pt
+*.ckpt
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+.uv/
+uv.lock
+
+# Stray empty nested git repo (not part of this project)
+TricoderMax/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
