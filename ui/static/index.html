@@ -42,6 +42,7 @@
   <header><h1>🩺 Tricorder — head-CT triage</h1></header>
   <div class="tabs">
     <div class="tab active" data-tab="work">Worklist</div>
+    <div class="tab" data-tab="real">Real study</div>
     <div class="tab" data-tab="calib">Calibration / operating point</div>
   </div>
 
@@ -50,6 +51,25 @@
     <div class="wrap">
       <div id="list"></div>
       <div id="detail"><div class="card mut">Select a study.</div></div>
+    </div>
+  </div>
+
+  <div id="real" class="hidden">
+    <div class="wrap" style="grid-template-columns:1fr;">
+      <div class="card">
+        <b>Run the real model on a DICOM study</b>
+        <div class="mut" style="font-size:12px;margin:4px 0 8px;">
+          Real RSNA-2019 ViT (Hugging Face) + midline + Claude verification. Point at a
+          single-series DICOM folder under the repo (e.g. <code>data/CQ500-xxxx/yyyy</code>).
+          Slow on CPU — a full study can take a few minutes.
+        </div>
+        <div style="display:flex;gap:8px;">
+          <input type="text" id="rpath" placeholder="data/&lt;study&gt;/&lt;series&gt;" style="flex:1;padding:6px;background:#0f1216;color:var(--txt);border:1px solid var(--line);border-radius:6px;">
+          <button id="rrun" style="padding:6px 16px;background:#4a90d9;color:#fff;border:none;border-radius:6px;cursor:pointer;">Run</button>
+        </div>
+        <div id="rstatus" class="mut" style="margin-top:8px;"></div>
+      </div>
+      <div id="rresult"></div>
     </div>
   </div>
 
@@ -204,12 +224,54 @@ function drawROC(r, op){
     <text x="${X(op.fpr)+8}" y="${Y(op.tpr)}">AUC=${r.auc}</text>`;
 }
 
+/* ---- real study ---- */
+function moduleBlock(title, m){
+  if(!m) return `<div class="card mut">${title}: not run</div>`;
+  const val = m.value==null?'—':`${m.value}${m.units?(' '+m.units):''}`;
+  let tag = m.status!=='ok' ? `🚫 ${m.status}` : (m.positive?'🔴 POSITIVE':'🟢 negative');
+  const prov = m.calibration ? `${m.calibration.metric.toUpperCase()}=${m.calibration.metric_value} on ${m.calibration.eval_dataset}` : 'uncalibrated';
+  const imgs = (m.overlay_urls||[]).map(u=>`<img src="${u}" style="max-width:260px;border:1px solid var(--line);border-radius:6px;margin:6px 6px 0 0;">`).join('');
+  return `<div class="card">
+    <div class="row"><b>${title}</b><span>${tag}</span></div>
+    <div class="kv"><div><b>${val}</b><span>value</span></div>
+      <div><b>${m.threshold==null?'—':m.threshold}</b><span>threshold</span></div>
+      <div><b style="font-size:11px">${prov}</b><span>provenance</span></div>
+      <div><b>${m.runtime_ms} ms</b><span>runtime</span></div></div>
+    ${m.evidence?.note?`<div class="mut" style="font-size:12px">${m.evidence.note}</div>`:''}
+    ${imgs?`<div><div class="mut" style="font-size:12px;margin-top:6px">heatmap — where the model attended (red = higher):</div>${imgs}</div>`:''}
+    ${m.error?`<div class="warn">${m.error}</div>`:''}
+  </div>`;
+}
+async function runReal(){
+  const path = document.getElementById('rpath').value.trim();
+  if(!path) return;
+  const st = document.getElementById('rstatus'); const box = document.getElementById('rresult');
+  st.textContent = '⏳ running real model (this can take a few minutes on CPU)…'; box.innerHTML='';
+  try{
+    const r = await fetch('/api/analyze', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({path})});
+    if(!r.ok){ st.textContent = '❌ '+(await r.json()).detail; return; }
+    const d = await r.json();
+    st.textContent = `✓ ${d.accession} · ${d.study_type} · ${d.n_slices} slices`;
+    const c = BAND[d.decision.band]||'var(--rou)';
+    box.innerHTML = `
+      <div class="card">
+        <span class="badge" style="background:${c}">${d.decision.action.toUpperCase()} · ${d.decision.band} · ${d.decision.score.toFixed(2)}</span>
+        <div style="margin-top:8px"><b>Claude (${d.assessment.source}):</b> ${d.assessment.summary}</div>
+        ${(d.assessment.caveats||[]).map(x=>`<div class="warn">${x}</div>`).join('')}
+      </div>
+      ${moduleBlock('Intracranial hemorrhage', d.ich)}
+      ${moduleBlock('Midline shift', d.midline)}`;
+  }catch(e){ st.textContent = '❌ '+e; }
+}
+document.getElementById('rrun').onclick = runReal;
+
 /* ---- tabs ---- */
 document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
   document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
   t.classList.add('active');
   const tab=t.dataset.tab;
   document.getElementById('work').classList.toggle('hidden', tab!=='work');
+  document.getElementById('real').classList.toggle('hidden', tab!=='real');
   document.getElementById('calib').classList.toggle('hidden', tab!=='calib');
 });
 

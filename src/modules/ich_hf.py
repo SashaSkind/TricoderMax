@@ -31,7 +31,7 @@ def _positive_index(id2label: dict) -> int:
 
 
 class HFICHModel:
-    supports_gradcam = False  # ViT attention attribution is out of scope here
+    supports_gradcam = True  # via ViT attention rollout (see .gradcam)
     untrained = False
 
     def __init__(self, repo: str = DEFAULT_REPO):
@@ -40,9 +40,38 @@ class HFICHModel:
 
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.processor = AutoImageProcessor.from_pretrained(repo)
-        self.model = AutoModelForImageClassification.from_pretrained(repo).to(self.device).eval()
+        # eager attention so output_attentions works (needed for the heatmap);
+        # sdpa (the default) silently drops attentions.
+        self.model = (
+            AutoModelForImageClassification.from_pretrained(repo, attn_implementation="eager")
+            .to(self.device)
+            .eval()
+        )
         self.pos_idx = _positive_index(self.model.config.id2label)
         self.model_name = f"RSNA-2019 ViT ({repo}, HuggingFace) — real open weights, weak (~0.61 acc)"
+
+    def gradcam(self, slice_3ch: np.ndarray) -> np.ndarray:
+        """ViT saliency for one slice → (Y,X) heatmap in [0,1].
+
+        Uses the last-layer CLS→patch attention (averaged over heads), reshaped to
+        the patch grid and upsampled — the standard ViT 'where did the model look'
+        map. It shows what the model attended to, honestly reflecting a weak model.
+        """
+        import torch
+        import torch.nn.functional as F
+
+        img = (np.transpose(slice_3ch, (1, 2, 0)) * 255).astype(np.uint8)
+        inputs = self.processor(images=[img], return_tensors="pt").to(self.device)
+        with torch.no_grad():
+            out = self.model(**inputs, output_attentions=True)
+        attn = out.attentions[-1][0]  # (heads, tokens, tokens)
+        cls_to_patches = attn[:, 0, 1:].mean(0)  # (num_patches,)
+        n = int(round(cls_to_patches.shape[0] ** 0.5))
+        grid = cls_to_patches.reshape(1, 1, n, n)
+        cam = F.interpolate(grid, size=slice_3ch.shape[1:], mode="bilinear", align_corners=False)[0, 0]
+        cam = cam - cam.min()
+        cam = cam / (cam.max() + 1e-6)
+        return cam.cpu().numpy()
 
     def score(self, three_ch: np.ndarray, batch: int = 16) -> tuple[np.ndarray, dict]:
         """three_ch: (Z,3,Y,X) in [0,1] → per-slice P(hemorrhage). No subtypes."""

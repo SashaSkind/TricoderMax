@@ -80,8 +80,13 @@ class ICHModule(Module):
             overlays: list[str] = []
             note_bits = [f"backend={_BACKEND}"]
             if getattr(model, "supports_gradcam", False) and not os.getenv("TRICORDER_ICH_NO_OVERLAY"):
-                cam = model.gradcam(three_ch[top_slices[0]])
-                overlays.append(_write_overlay(ctx.accession, top_slices[0], window_named(volume[top_slices[0]], "brain"), cam))
+                # A heatmap failure must never sink the detection — keep the score.
+                try:
+                    z0 = top_slices[0]
+                    cam = model.gradcam(three_ch[z0])
+                    overlays.append(_write_overlay(ctx.accession, z0, window_named(volume[z0], "brain"), cam))
+                except Exception as e:  # noqa: BLE001
+                    note_bits.append(f"heatmap unavailable ({type(e).__name__})")
             if getattr(model, "untrained", False):
                 note_bits.append("UNTRAINED MODEL — wiring test only, not real detection")
 
