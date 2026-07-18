@@ -25,15 +25,21 @@ from src.logging_conf import get_logger
 from src.modules.base import Module
 from src.modules.factory import build_module
 from src.registry import descriptors_for
+from src.router import classify
 
 log = get_logger(__name__)
 
 
-def route(ctx: StudyContext) -> tuple[list[str], bool]:
-    """Pick module ids for a study. Returns (module_ids, superset_run)."""
-    superset = ctx.study_type == StudyType.unknown
-    descriptors = descriptors_for(ctx.study_type)
-    return [d.module_id for d in descriptors], superset
+def route(ctx: StudyContext) -> tuple[StudyContext, list[str], bool, str]:
+    """Resolve study type (metadata only) and pick module ids.
+
+    Returns (resolved_ctx, module_ids, superset_run, routing_reason).
+    """
+    routing = classify(ctx)
+    resolved = ctx.model_copy(update={"study_type": routing.study_type})
+    superset = routing.study_type == StudyType.unknown
+    descriptors = descriptors_for(routing.study_type)
+    return resolved, [d.module_id for d in descriptors], superset, routing.reason
 
 
 def _run_one(module: Module, volume: np.ndarray, ctx: StudyContext) -> ModuleResult:
@@ -52,9 +58,15 @@ def _run_one(module: Module, volume: np.ndarray, ctx: StudyContext) -> ModuleRes
 def run_panel(ctx: StudyContext, volume: np.ndarray) -> PanelOutput:
     """Fan the detector panel out over `volume` and assemble a PanelOutput."""
     slog = log.bind(accession=ctx.accession)
-    module_ids, superset = route(ctx)
+    ctx, module_ids, superset, routing_reason = route(ctx)
     ctx = ctx.model_copy(update={"routing_ambiguous": superset})
-    slog.info("panel.start", modules=module_ids, superset=superset, study_type=ctx.study_type.value)
+    slog.info(
+        "panel.start",
+        modules=module_ids,
+        superset=superset,
+        study_type=ctx.study_type.value,
+        routing=routing_reason,
+    )
 
     started = datetime.now(timezone.utc)
     modules = [build_module(mid) for mid in module_ids]
@@ -83,6 +95,7 @@ def run_panel(ctx: StudyContext, volume: np.ndarray) -> PanelOutput:
         modules_selected=module_ids,
         modules_failed=failed,
         superset_run=superset,
+        routing_reason=routing_reason,
         started_at=started,
         completed_at=completed,
         total_runtime_ms=int((completed - started).total_seconds() * 1000),

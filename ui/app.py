@@ -65,6 +65,7 @@ def _to_row(rank: int, r: TriageResult) -> dict:
         "n_failed": len(r.panel.modules_failed),
         "superset": r.panel.superset_run,
         "reason": r.decision.reason,
+        "routing_reason": r.panel.routing_reason,
         "audit": r.decision.audit,
         "summary": r.assessment.summary,
         "caveats": r.assessment.caveats,
@@ -166,6 +167,7 @@ def main() -> None:
                 _finding_line(m)
 
         with st.expander("Policy audit trail"):
+            st.write(f"**Routing:** {row['routing_reason']}")
             st.write(f"**Decision:** {row['reason']}")
             for line in row["audit"]:
                 st.text(f"• {line}")

@@ -21,7 +21,7 @@ def _vol():
 
 
 def test_unknown_study_type_runs_superset():
-    ids, superset = route(_ctx(study_type=StudyType.unknown))
+    _resolved, ids, superset, _reason = route(_ctx(study_type=StudyType.unknown, indication=None))
     assert superset is True
     assert set(ids) == set(REGISTRY.keys())  # invariant 4: full superset
 

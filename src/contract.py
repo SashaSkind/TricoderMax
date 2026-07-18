@@ -147,6 +147,7 @@ class PanelOutput(BaseModel):
     modules_selected: list[str]  # module_ids routing chose to run
     modules_failed: list[str] = Field(default_factory=list)
     superset_run: bool = False  # invariant 4 fan-out actually happened
+    routing_reason: str = ""  # why this study type / panel was chosen (audit)
     started_at: datetime
     completed_at: datetime
     total_runtime_ms: int
