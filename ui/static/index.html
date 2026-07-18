@@ -55,21 +55,20 @@
   </div>
 
   <div id="real" class="hidden">
-    <div class="wrap" style="grid-template-columns:1fr;">
-      <div class="card">
-        <b>Run the real model on a DICOM study</b>
-        <div class="mut" style="font-size:12px;margin:4px 0 8px;">
-          Real RSNA-2019 ViT (Hugging Face) + midline + Claude verification. Point at a
-          single-series DICOM folder under the repo (e.g. <code>data/CQ500-xxxx/yyyy</code>).
-          Slow on CPU — a full study can take a few minutes.
+    <div class="wrap" style="grid-template-columns:340px 1fr;">
+      <div>
+        <div class="card"><b>Real studies</b>
+          <div class="mut" style="font-size:12px;margin-top:4px;">
+            Click a study → real ConvNeXt V2 ICH model + midline + Claude. Cached runs are instant;
+            uncached run live (~2 min on CPU).
+          </div>
         </div>
-        <div style="display:flex;gap:8px;">
-          <input type="text" id="rpath" placeholder="data/&lt;study&gt;/&lt;series&gt;" style="flex:1;padding:6px;background:#0f1216;color:var(--txt);border:1px solid var(--line);border-radius:6px;">
-          <button id="rrun" style="padding:6px 16px;background:#4a90d9;color:#fff;border:none;border-radius:6px;cursor:pointer;">Run</button>
-        </div>
-        <div id="rstatus" class="mut" style="margin-top:8px;"></div>
+        <div id="rlist"></div>
       </div>
-      <div id="rresult"></div>
+      <div>
+        <div id="rstatus" class="mut" style="margin:0 0 8px 4px;"></div>
+        <div id="rresult"><div class="card mut">Select a study on the left.</div></div>
+      </div>
     </div>
   </div>
 
@@ -242,16 +241,37 @@ function moduleBlock(title, m){
     ${m.error?`<div class="warn">${m.error}</div>`:''}
   </div>`;
 }
-async function runReal(){
-  const path = document.getElementById('rpath').value.trim();
-  if(!path) return;
-  const st = document.getElementById('rstatus'); const box = document.getElementById('rresult');
-  st.textContent = '⏳ running real model (this can take a few minutes on CPU)…'; box.innerHTML='';
+let REAL_STUDIES = [];
+async function loadStudies(){
+  const box = document.getElementById('rlist'); box.innerHTML = '<div class="card mut">loading…</div>';
+  let d;
   try{
-    const r = await fetch('/api/analyze', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({path})});
-    if(!r.ok){ st.textContent = '❌ '+(await r.json()).detail; return; }
+    const r = await fetch('/api/studies');
+    if(!r.ok){ box.innerHTML = '<div class="warn">Server is out of date (/api/studies '+r.status+'). Restart it: <code>uvicorn ui.server:app --reload</code></div>'; return; }
+    d = await r.json();
+  }catch(e){ box.innerHTML = '<div class="warn">Cannot reach server. Restart: <code>uvicorn ui.server:app --reload</code></div>'; return; }
+  REAL_STUDIES = d.studies || [];
+  box.innerHTML = '';
+  if(!REAL_STUDIES.length){ box.innerHTML = '<div class="card mut">No studies in data/. Run scripts/make_synthetic_study.py or fetch a CQ500 study.</div>'; return; }
+  for(const s of REAL_STUDIES){
+    const badge = s.cached ? '<span class="tag" style="color:var(--ok)">⚡ instant</span>' : '<span class="tag">~2 min</span>';
+    const node = el(`<div class="card study">
+      <div class="row"><b>${s.label}</b>${badge}</div>
+      <div class="mut" style="font-size:12px">${s.n_slices} slices</div></div>`);
+    node.onclick = ()=>runReal(s);
+    box.appendChild(node);
+  }
+}
+async function runReal(s){
+  const st = document.getElementById('rstatus'); const box = document.getElementById('rresult');
+  document.querySelectorAll('#rlist .study').forEach(n=>n.classList.remove('sel'));
+  st.textContent = s.cached ? '⏳ loading cached result…' : '⏳ running real model live (~2 min on CPU)…';
+  box.innerHTML = '<div class="card mut">'+st.textContent+'</div>';
+  try{
+    const r = await fetch('/api/analyze', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({path:s.path})});
+    if(!r.ok){ st.textContent = '❌ '+(await r.json()).detail; box.innerHTML=''; return; }
     const d = await r.json();
-    st.textContent = `✓ ${d.accession} · ${d.study_type} · ${d.n_slices} slices`;
+    st.textContent = `✓ ${d.accession} · ${d.study_type} · ${d.n_slices} slices${d.cached?' · cached':''}`;
     const c = BAND[d.decision.band]||'var(--rou)';
     box.innerHTML = `
       <div class="card">
@@ -261,9 +281,10 @@ async function runReal(){
       </div>
       ${moduleBlock('Intracranial hemorrhage', d.ich)}
       ${moduleBlock('Midline shift', d.midline)}`;
-  }catch(e){ st.textContent = '❌ '+e; }
+    // refresh cached badges
+    loadStudies();
+  }catch(e){ st.textContent = '❌ '+e; box.innerHTML=''; }
 }
-document.getElementById('rrun').onclick = runReal;
 
 /* ---- tabs ---- */
 document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
@@ -273,6 +294,7 @@ document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
   document.getElementById('work').classList.toggle('hidden', tab!=='work');
   document.getElementById('real').classList.toggle('hidden', tab!=='real');
   document.getElementById('calib').classList.toggle('hidden', tab!=='calib');
+  if(tab==='real' && !REAL_STUDIES.length) loadStudies();
 });
 
 boot();

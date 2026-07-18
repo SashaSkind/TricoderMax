@@ -116,10 +116,11 @@ def read_study_context(series_dir: str, accession: str | None = None) -> StudyCo
     sex = sex if sex in ("M", "F") else ("O" if sex else None)
     ps = getattr(ref, "PixelSpacing", [1.0, 1.0])
     ps_y, ps_x = (float(ps[0]), float(ps[1])) if len(ps) == 2 else (1.0, 1.0)
-    # Filesystem-safe accession (used in artifact paths/URLs) — no slashes.
-    fallback_acc = str(getattr(ref, "AccessionNumber", "") or "").strip() or os.path.basename(
+    # Filesystem-safe accession (used in artifact paths/URLs) — no slashes/dots.
+    raw_acc = str(getattr(ref, "AccessionNumber", "") or "").strip() or os.path.basename(
         series_dir.rstrip("/")
     )
+    fallback_acc = "".join(c for c in raw_acc if c.isalnum() or c in "-_").lstrip("-_") or "study"
     return StudyContext(
         accession=accession or fallback_acc,
         study_uid=str(getattr(ref, "StudyInstanceUID", "")),
