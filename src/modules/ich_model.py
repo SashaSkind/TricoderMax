@@ -79,13 +79,7 @@ class ICHModel:
         self.untrained = False
 
         if ckpt is not None:
-            state = torch.load(ckpt, map_location=self.device)
-            for k in ("state_dict", "model", "model_state_dict"):
-                if isinstance(state, dict) and k in state:
-                    state = state[k]
-                    break
-            state = {kk.replace("module.", ""): vv for kk, vv in state.items()}
-            self.model.load_state_dict(state, strict=False)
+            _load_checkpoint_strict(self.model, ckpt, self.device)
         elif os.getenv("TRICORDER_ICH_ALLOW_RANDOM", "").strip() in ("1", "true", "True"):
             self.untrained = True  # wiring-test model — NOT real detection
         else:
@@ -156,6 +150,39 @@ class ICHModel:
         if last is None:
             raise RuntimeError("no Conv2d layer found for Grad-CAM")
         return last
+
+
+def _load_checkpoint_strict(model, ckpt, device, min_match: float = 0.5) -> None:
+    """Load a checkpoint and REFUSE a poor match.
+
+    RSNA-2019 solutions use varied backbones; if the fetched checkpoint doesn't
+    match `TRICORDER_ICH_BACKBONE`, `strict=False` would silently load almost
+    nothing and the model would output garbage while *looking* real. So we filter
+    to shape-compatible keys, count them, and raise with guidance if too few load.
+    """
+    import torch
+
+    state = torch.load(ckpt, map_location=device)
+    for k in ("state_dict", "model", "model_state_dict"):
+        if isinstance(state, dict) and k in state:
+            state = state[k]
+            break
+    state = {kk.replace("module.", ""): vv for kk, vv in state.items()}
+
+    model_sd = model.state_dict()
+    compatible = {k: v for k, v in state.items() if k in model_sd and model_sd[k].shape == v.shape}
+    total = len(model_sd)
+    frac = len(compatible) / max(1, total)
+    if frac < min_match:
+        raise RuntimeError(
+            f"ICH checkpoint {os.path.basename(str(ckpt))} matched only "
+            f"{len(compatible)}/{total} params ({frac:.0%}) of backbone "
+            f"'{_manifest_backbone()}'. This checkpoint does not match the model — "
+            f"set TRICORDER_ICH_BACKBONE (or manifest.json 'backbone') to the "
+            f"solution's actual architecture. Refusing to run garbage weights."
+        )
+    model.load_state_dict(compatible, strict=False)
+    print(f"[ICH] loaded {len(compatible)}/{total} params ({frac:.0%}) from {os.path.basename(str(ckpt))}")
 
 
 def aggregate(scores: SliceScores) -> dict:
