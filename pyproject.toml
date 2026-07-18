@@ -35,3 +35,7 @@ packages = ["src"]
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+filterwarnings = [
+    "ignore::DeprecationWarning:pydicom",
+    "ignore:Invalid value for VR UI:UserWarning",
+]
