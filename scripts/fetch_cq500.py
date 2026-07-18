@@ -1,21 +1,25 @@
 """
 Prepare CQ500 studies for Tricorder.
 
-CQ500 (qure.ai, CC BY-NC-SA — non-commercial) is distributed as zip archives from
-a terms-gated page. This script does NOT guess URLs: you accept the license at
-    http://headctstudy.qure.ai/dataset
-copy the zip link(s), and pass them here. It downloads, extracts, and lays each
-DICOM series out as  data/<study>/<series>/*.dcm  so run_study.py can consume it.
+CQ500 (qure.ai, CC BY-NC-SA — non-commercial). The original qure.ai download page
+(headctstudy.qure.ai) is DEFUNCT (domain no longer resolves), so use a mirror:
 
-It also converts the CQ500 `reads.csv` into an eval manifest with majority-vote
-labels for `eval/run_eval.py --manifest`.
+  - Kaggle (recommended — you likely have a token):
+        kaggle datasets download -d crawford/qureai-headct -p data/_cq500 --unzip
+        python scripts/fetch_cq500.py --src data/_cq500
+  - Academic Torrents:
+        https://academictorrents.com/details/47e9d8aab761e75fd0a81982fa62bddf3a173831
+        (download, then --src the extracted folder)
+  - If you still have a direct zip URL from somewhere: --url "<zip_url>"
+
+Whatever the source, this lays each DICOM series out as
+  data/<study>/<series>/*.dcm  so run_study.py can consume it, and converts the
+CQ500 reads CSV into an eval manifest with majority-vote labels.
 
 Usage:
-  # 1) prepare imaging (one or more study zip URLs from the CQ500 page):
-  python scripts/fetch_cq500.py --url "<zip_url>" [--url "<zip_url>" ...]
-
-  # 2) build the eval manifest from the reads CSV (download reads.csv from the page):
-  python scripts/fetch_cq500.py --reads path/to/reads.csv
+  python scripts/fetch_cq500.py --src data/_cq500          # reorganize a local dir
+  python scripts/fetch_cq500.py --url "<zip_url>"          # download+reorganize a zip
+  python scripts/fetch_cq500.py --reads path/to/reads.csv  # build eval manifest
 
 Non-commercial research use only. No imaging data is committed (data/ gitignored).
 """
@@ -48,16 +52,12 @@ def _download(url: str, dest: Path) -> Path:
     return out
 
 
-def _reorganize(zip_path: Path) -> None:
-    """Extract and lay DICOMs out as data/<study>/<series>/*.dcm by header UID."""
+def _reorganize_dir(src: Path) -> int:
+    """Lay every DICOM under `src` out as data/<study>/<series>/*.dcm by header UID."""
     import pydicom
 
-    tmp = DATA / "_cq500_raw"
-    with zipfile.ZipFile(zip_path) as z:
-        z.extractall(tmp)
-
     groups: dict[tuple[str, str], list[Path]] = defaultdict(list)
-    for p in tmp.rglob("*"):
+    for p in src.rglob("*"):
         if p.is_file():
             try:
                 ds = pydicom.dcmread(p, stop_before_pixels=True)
@@ -72,6 +72,14 @@ def _reorganize(zip_path: Path) -> None:
         for i, f in enumerate(sorted(files)):
             shutil.copy(f, sdir / f"{i:04d}.dcm")
         print(f"  {sdir.relative_to(DATA)}: {len(files)} slices")
+    return len(groups)
+
+
+def _reorganize(zip_path: Path) -> None:
+    tmp = DATA / "_cq500_raw"
+    with zipfile.ZipFile(zip_path) as z:
+        z.extractall(tmp)
+    _reorganize_dir(tmp)
     shutil.rmtree(tmp, ignore_errors=True)
 
 
@@ -118,12 +126,16 @@ def build_manifest(reads_csv: str) -> None:
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
+    ap.add_argument("--src", help="reorganize an already-downloaded CQ500 dir (Kaggle/torrent)")
     ap.add_argument("--url", action="append", default=[], help="CQ500 study zip URL (repeatable)")
     ap.add_argument("--reads", help="path to CQ500 reads.csv → build eval manifest")
     args = ap.parse_args()
-    if not args.url and not args.reads:
+    if not args.url and not args.reads and not args.src:
         ap.print_help()
         sys.exit(0)
+    if args.src:
+        n = _reorganize_dir(Path(args.src))
+        print(f"reorganized {n} series into {DATA}/")
     for u in args.url:
         z = _download(u, DATA / "_cq500_zips")
         _reorganize(z)
