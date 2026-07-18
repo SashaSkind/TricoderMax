@@ -43,6 +43,7 @@
   <div class="tabs">
     <div class="tab active" data-tab="work">Worklist</div>
     <div class="tab" data-tab="real">Real study</div>
+    <div class="tab" data-tab="report">Reporting agent</div>
     <div class="tab" data-tab="calib">Calibration / operating point</div>
   </div>
 
@@ -69,6 +70,22 @@
         <div id="rstatus" class="mut" style="margin:0 0 8px 4px;"></div>
         <div id="rresult"><div class="card mut">Select a study on the left.</div></div>
       </div>
+    </div>
+  </div>
+
+  <div id="report" class="hidden">
+    <div class="wrap" style="grid-template-columns:1fr;">
+      <div class="card">
+        <b>Post-read reporting agent</b>
+        <div class="mut" style="font-size:12px;margin:4px 0 8px;">
+          A separate agent (teammate's <code>radiologist_agent</code> package) that runs <i>after</i> the read:
+          drafts the report, detects critical findings, and closes the loop on care-team communication —
+          notify → escalate unacknowledged by phone → confirm. Bundled CTPA case (acute PE).
+        </div>
+        <button id="reprun" style="padding:6px 16px;background:#4a90d9;color:#fff;border:none;border-radius:6px;cursor:pointer;">Run reporting agent</button>
+        <span id="repstatus" class="mut" style="margin-left:10px;"></span>
+      </div>
+      <div id="represult"></div>
     </div>
   </div>
 
@@ -288,6 +305,25 @@ async function runReal(s){
   }catch(e){ st.textContent = '❌ '+e; box.innerHTML=''; }
 }
 
+/* ---- reporting agent ---- */
+async function runReport(){
+  const st = document.getElementById('repstatus'); const box = document.getElementById('represult');
+  st.textContent = '⏳ running…'; box.innerHTML='';
+  try{
+    const r = await fetch('/api/report');
+    if(!r.ok){ st.textContent = '❌ '+(await r.json()).detail; return; }
+    const d = await r.json();
+    st.textContent = `✓ backend: ${d.backend}${d.cached?' · cached':''}`;
+    const crit = (d.critical||[]).map(c=>`<div class="card" style="border-color:var(--imm)"><b style="color:var(--pos)">🚨 CRITICAL (${c.severity})</b><div style="margin-top:4px">${c.text}</div><div class="mut" style="font-size:12px;margin-top:4px">${c.rationale}</div></div>`).join('');
+    box.innerHTML = `${crit}
+      <div class="card"><b>Pipeline (detect → notify → escalate → confirm)</b>
+        <pre style="max-height:340px;overflow:auto">${(d.log||'').replace(/</g,'&lt;')}</pre></div>
+      <div class="card"><b>Drafted report</b>
+        <pre style="max-height:340px;overflow:auto">${(d.report||'').replace(/</g,'&lt;')}</pre></div>`;
+  }catch(e){ st.textContent = '❌ '+e; }
+}
+document.getElementById('reprun').onclick = runReport;
+
 /* ---- tabs ---- */
 document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
   document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
@@ -295,6 +331,7 @@ document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
   const tab=t.dataset.tab;
   document.getElementById('work').classList.toggle('hidden', tab!=='work');
   document.getElementById('real').classList.toggle('hidden', tab!=='real');
+  document.getElementById('report').classList.toggle('hidden', tab!=='report');
   document.getElementById('calib').classList.toggle('hidden', tab!=='calib');
   if(tab==='real' && !REAL_STUDIES.length) loadStudies();
 });

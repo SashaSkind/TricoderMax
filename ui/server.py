@@ -207,6 +207,43 @@ def api_analyze(req: AnalyzeRequest) -> JSONResponse:
     return JSONResponse(payload)
 
 
+@app.get("/api/report")
+def api_report() -> JSONResponse:
+    """Run the (teammate's) radiologist reporting agent on its bundled CTPA case:
+    draft report → detect critical finding → notify care team → escalate → confirm.
+    Cached after first run."""
+    import contextlib
+    import io
+
+    cache = config.ARTIFACTS_DIR / "_reporting_agent.json"
+    if cache.exists():
+        payload = json.loads(cache.read_text())
+        payload["cached"] = True
+        return JSONResponse(payload)
+    try:
+        from radiologist_agent.data_sources import load_case
+        from radiologist_agent.llm import LLM
+        from radiologist_agent.orchestrator import run_workflow
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(500, f"radiologist_agent unavailable: {e}")
+
+    llm = LLM()
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        rep = run_workflow(load_case("case_ctpa.json"), llm=llm)
+    payload = {
+        "backend": llm.mode,
+        "report": rep.render(),
+        "log": buf.getvalue(),
+        "critical": [{"text": c.text, "severity": str(c.severity).split(".")[-1],
+                      "rationale": c.rationale} for c in rep.critical_findings],
+    }
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    cache.write_text(json.dumps(payload))
+    payload["cached"] = False
+    return JSONResponse(payload)
+
+
 @app.get("/api/artifact/{accession}/{name}")
 def api_artifact(accession: str, name: str) -> FileResponse:
     # Confined to artifacts/<accession>/ — no path traversal.
