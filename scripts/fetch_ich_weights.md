@@ -14,14 +14,16 @@ and loads with `strict=False` so a compatible head/backbone loads cleanly.
 
 ## Where these live
 Winning RSNA-2019 solution weights are published as **Kaggle datasets** attached
-to the authors' inference notebooks (not on GitHub). Fetch with the Kaggle API:
+to the authors' inference notebooks (not on GitHub). Use the fetch script — it
+downloads, lays out `weights/ich/ich_cnn.pth`, and writes a `manifest.json` so the
+loader auto-selects the matching backbone:
 
-    pip install kaggle           # + ~/.kaggle/kaggle.json token
-    # accept the competition rules once, then download the author's weights dataset
-    kaggle datasets download -d <owner>/<ich-weights-dataset> -p weights/ich --unzip
+    uv pip install kaggle        # + ~/.kaggle/kaggle.json token; accept comp rules
+    uv run python scripts/fetch_ich_weights.py --dataset <owner>/<slug> --backbone <timm_backbone>
 
-Then adapt the state_dict to the backbone above if the author used a different one
-(set `TRICORDER_ICH_BACKBONE` to match, e.g. `seresnext50_32x4d`).
+Find `<owner>/<slug>` in a public RSNA-2019 inference notebook's "+ Add Data"
+panel (it lists the weights dataset it loads). Match `--backbone` to that
+solution's architecture (e.g. `tf_efficientnet_b0`, `seresnext50_32x4d`).
 
 Licensing: RSNA-2019 is non-commercial; reused weights inherit those terms.
 

@@ -33,12 +33,26 @@ class SliceScores:
     input_hw: int
 
 
-def build_model(num_classes: int = len(LABELS)):
+def _manifest_backbone() -> str:
+    """Backbone recorded by scripts/fetch_ich_weights.py, if a manifest exists."""
+    from src import config
+
+    mf = config.WEIGHTS_DIR / "ich" / "manifest.json"
+    if mf.exists():
+        try:
+            import json
+
+            return json.loads(mf.read_text()).get("backbone", DEFAULT_BACKBONE)
+        except Exception:  # noqa: BLE001
+            pass
+    return DEFAULT_BACKBONE
+
+
+def build_model(num_classes: int = len(LABELS), backbone: str | None = None):
     import timm
-    import torch.nn as nn  # noqa: F401
 
     return timm.create_model(
-        DEFAULT_BACKBONE, pretrained=False, num_classes=num_classes, in_chans=3
+        backbone or _manifest_backbone(), pretrained=False, num_classes=num_classes, in_chans=3
     )
 
 
