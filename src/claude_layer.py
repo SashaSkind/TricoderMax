@@ -100,10 +100,20 @@ def detector_only_assessment(panel: PanelOutput) -> ClaudeAssessment:
     caveats = ["Detector-only ranking (Claude layer not invoked)."]
     if panel.modules_failed:
         caveats.append(f"Modules failed and were not considered: {', '.join(panel.modules_failed)}.")
-    labels = ", ".join(sorted({r.finding_class.value for r in positives})) or "no positive findings"
+
+    # Brief one-liner naming ONLY findings with confidence >= 0.90, + that confidence.
+    high_conf = [
+        r for r in positives if r.result_type == "probability" and (r.value or 0.0) >= 0.90
+    ]
+    if high_conf:
+        top = max(high_conf, key=lambda r: r.value or 0.0)
+        names = ", ".join(sorted({r.finding_class.value.replace("_", " ") for r in high_conf}))
+        summary = f"{names} — confidence {top.value:.2f}."
+    else:
+        summary = "No high-confidence critical finding."
     return ClaudeAssessment(
         priority_score=round(score, 3), priority_band=_band_from_score(score),
-        verification=verification, summary=f"Detector panel flagged: {labels}.",
+        verification=verification, summary=summary,
         caveats=caveats, abstain=False, source="fallback",
     )
 
@@ -123,7 +133,12 @@ _SYSTEM = (
     "detector-only rank. Never fabricate findings the panel did not report. If a prior "
     "report is provided, set prior_comparison (e.g. 'new since <date>'). If you are not "
     "confident, set abstain=true and the system will use the detector-only ranking. "
-    "Report the EXTERNAL calibration you are given; do not invent numbers."
+    "Report the EXTERNAL calibration you are given; do not invent numbers.\n\n"
+    "SUMMARY FORMAT (strict): `summary` must be ONE short clinical sentence that names "
+    "only findings whose confidence is ≥ 0.90 — never mention any finding below 0.90 — "
+    "immediately followed by that confidence, e.g. 'Acute intraparenchymal hemorrhage — "
+    "confidence 0.93.' If no finding reaches 0.90, summary is exactly "
+    "'No high-confidence critical finding.'"
 )
 
 
