@@ -1,0 +1,29 @@
+indication,StudyDescription,ContrastBolusAgent,expected
+"MVC, GCS 13, rule out ICH","CT HEAD WO CONTRAST","",head_ct_noncontrast
+"Thunderclap headache, ? SAH","CT HEAD WITHOUT CONTRAST","",head_ct_noncontrast
+"Fall on anticoagulation","NCCT HEAD","",head_ct_noncontrast
+"Altered mental status","CT BRAIN WO","",head_ct_noncontrast
+"Seizure, first episode","CT HEAD NON-CONTRAST","",head_ct_noncontrast
+"Head trauma, LOC","CT HEAD W/O CONTRAST","",head_ct_noncontrast
+"Stroke code, last known well 2h","NCCT HEAD","",head_ct_noncontrast
+"Worst headache of life","CT HEAD WO CONTRAST","",head_ct_noncontrast
+"Syncope, head strike","CT BRAIN WITHOUT CONTRAST","",head_ct_noncontrast
+"Confusion, elderly","CT HEAD WO","",head_ct_noncontrast
+"Known aneurysm, follow-up","CT ANGIOGRAM HEAD","Omnipaque",head_ct_other
+"Rule out vascular malformation","CTA HEAD AND NECK","Isovue",head_ct_other
+"Suspected dural venous sinus thrombosis","CT VENOGRAM HEAD","Omnipaque",head_ct_other
+"Tumor characterization","CT HEAD WITH CONTRAST","Omnipaque",head_ct_other
+"Post-op brain, enhancement","CT BRAIN W/ CONTRAST","Ultravist",head_ct_other
+"Carotid stenosis workup","CTA CIRCLE OF WILLIS","Isovue",head_ct_other
+"Vessel imaging for AVM","CT ANGIO BRAIN","Omnipaque",head_ct_other
+"Abdominal pain","CT ABDOMEN PELVIS","Omnipaque",unknown
+"Chest pain, ? PE","CT PULMONARY ANGIOGRAM","Omnipaque",unknown
+"Low back pain","MRI LUMBAR SPINE","",unknown
+"Knee injury","XR KNEE","",unknown
+"Routine chest","CT CHEST WO CONTRAST","",unknown
+"Neck mass","CT NECK SOFT TISSUE","Omnipaque",unknown
+"Sinus symptoms","CT SINUS","",unknown
+"Cardiac workup","CT CORONARY ANGIOGRAM","Omnipaque",unknown
+"Renal colic","CT UROGRAM","",unknown
+"Facial trauma","CT FACIAL BONES","",unknown
+"Shoulder pain","MRI SHOULDER","",unknown

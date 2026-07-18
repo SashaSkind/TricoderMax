@@ -15,8 +15,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import json  # noqa: E402
+
 import streamlit as st  # noqa: E402
 
+from src import config  # noqa: E402
 from src.contract import ModuleResult  # noqa: E402
 from src.pipeline import TriageResult, rank_worklist, triage_study  # noqa: E402
 from src.sample_worklist import SAMPLE_STUDIES, dummy_volume  # noqa: E402
@@ -108,10 +111,87 @@ def _finding_line(m: dict) -> None:
         st.caption(f"evidence slices: {mr.evidence.slice_indices}  ·  {mr.evidence.note or ''}")
 
 
+def _load_eval() -> dict:
+    f = config.REPO_ROOT / "eval_results.json"
+    return json.loads(f.read_text()) if f.exists() else {}
+
+
+def calibration_tab() -> None:
+    st.subheader("Per-module calibration & operating point")
+    results = _load_eval()
+    if not results:
+        st.info("No eval results yet. Run: `uv run python -m eval.run_eval --demo`")
+        return
+    mid = st.selectbox("Module", list(results))
+    r = results[mid]
+    st.caption(
+        f"Evaluated on **{r['dataset']}** (n={r['n']}). "
+        + ("⚠️ synthetic demo cohort — not real CQ500 numbers." if "SYNTH" in r["dataset"] else "External metric.")
+    )
+    # Threshold slider → recompute operating point on the ROC.
+    default_thr = float(r["threshold"])
+    thr = st.slider(
+        f"Operating threshold ({mid})", 0.0, max(1.0, default_thr * 2),
+        value=default_thr, step=0.01,
+    )
+    # Recompute the operating point at the chosen threshold from stored ROC points.
+    fpr, tpr, sens, spec, op = _operating_point(r, thr)
+    c1, c2, c3 = st.columns(3)
+    c1.metric("AUC", r["auc"])
+    c2.metric("sensitivity", f"{sens:.2f}")
+    c3.metric("specificity", f"{spec:.2f}")
+
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots(figsize=(4.5, 4.5))
+    ax.plot(r["fpr"], r["tpr"], label=f"ROC (AUC={r['auc']})")
+    ax.plot([0, 1], [0, 1], "--", color="gray")
+    ax.scatter([op[0]], [op[1]], color="red", zorder=5, label=f"operating pt @ {thr:.2f}")
+    ax.set_xlabel("FPR (1−specificity)")
+    ax.set_ylabel("TPR (sensitivity)")
+    ax.set_title(f"{mid} — {r['dataset']}")
+    ax.legend(loc="lower right", fontsize=8)
+    st.pyplot(fig)
+    st.caption(
+        "Lowering the threshold raises sensitivity (catch more) at the cost of "
+        "specificity (more pages). A study is never removed from the queue at any threshold."
+    )
+
+
+def _operating_point(r: dict, thr: float):
+    """Exact ROC vertex at a decision threshold (positive iff score >= thr).
+
+    ROC arrays are aligned with descending `thresholds` (starting at +inf). The
+    operating point is the last vertex whose threshold is still >= thr.
+    """
+    import numpy as np
+
+    fpr = np.array(r["fpr"])
+    tpr = np.array(r["tpr"])
+    thresholds = r.get("thresholds")
+    if not thresholds:
+        return fpr, tpr, r["sensitivity"], r["specificity"], (r["operating_fpr"], r["operating_tpr"])
+    idx = 0
+    for i, t in enumerate(thresholds):
+        if t >= thr:
+            idx = i
+    sens = float(tpr[idx])
+    spec = float(1.0 - fpr[idx])
+    return fpr, tpr, sens, spec, (float(fpr[idx]), float(tpr[idx]))
+
+
 def main() -> None:
     banner()
-    st.title("🩺 Tricorder — head-CT triage worklist")
+    st.title("🩺 Tricorder — head-CT triage")
 
+    tab_work, tab_calib = st.tabs(["Worklist", "Calibration / operating point"])
+    with tab_calib:
+        calibration_tab()
+    with tab_work:
+        worklist_tab()
+
+
+def worklist_tab() -> None:
     rows = _run_all()
     paged = sum(1 for r in rows if r["action"] == "page")
     st.write(f"**{len(rows)} studies** · {paged} paged · every study remains in the reading queue.")

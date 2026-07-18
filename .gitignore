@@ -8,6 +8,10 @@ weights/
 *.pt
 *.ckpt
 
+# Generated eval outputs (regenerate with eval/run_eval.py; may hold demo numbers)
+registry_calibration.json
+eval_results.json
+
 # Python
 .venv/
 __pycache__/
