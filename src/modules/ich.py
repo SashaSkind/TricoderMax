@@ -61,16 +61,23 @@ def _get_model():
     return _MODEL
 
 
-def _write_overlay(accession: str, z: int, brain_slice: np.ndarray, cam: np.ndarray) -> str:
+def _write_overlay(accession: str, z: int, brain_slice: np.ndarray, cam: np.ndarray, hu_slice: np.ndarray) -> str:
     from PIL import Image
 
     out_dir = config.ARTIFACTS_DIR / accession
     out_dir.mkdir(parents=True, exist_ok=True)
+    # Confine attention to the intracranial space: drop air (background/corners) and
+    # dense bone (calvarium). Attention outside the brain is meaningless for ICH, and
+    # leaving it in makes the map look like it fired on the skull.
+    brain_mask = (hu_slice > -50.0) & (hu_slice < 300.0)
+    cam = cam * brain_mask
+    m = cam.max()
+    cam = cam / m if m > 0 else cam  # renormalize within the brain
     base = to_uint8(brain_slice)
     rgb = np.stack([base, base, base], axis=-1).astype(np.float32)
     heat = np.zeros_like(rgb)
     heat[..., 0] = to_uint8(cam)
-    blend = (0.6 * rgb + 0.4 * heat).clip(0, 255).astype(np.uint8)
+    blend = (rgb + 0.5 * heat).clip(0, 255).astype(np.uint8)  # additive red where attention is high
     path = out_dir / f"cam_{z}.png"
     Image.fromarray(blend).save(path)
     try:
@@ -110,7 +117,9 @@ class ICHModule(Module):
                 try:
                     z0 = top_slices[0]
                     cam = model.gradcam(three_ch[z0])
-                    overlays.append(_write_overlay(ctx.accession, z0, window_named(volume[z0], "brain"), cam))
+                    overlays.append(
+                        _write_overlay(ctx.accession, z0, window_named(volume[z0], "brain"), cam, volume[z0])
+                    )
                 except Exception as e:  # noqa: BLE001
                     note_bits.append(f"heatmap unavailable ({type(e).__name__})")
             if getattr(model, "untrained", False):

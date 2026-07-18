@@ -75,6 +75,33 @@ def test_negative_panel_reorders():
     assert d.action == "reorder" and d.paging_findings == []
 
 
+def test_rank_floor_claude_cannot_demote_below_detector_baseline():
+    """A Claude down-weight blocks the page but must NOT push the study below its
+    detector-only baseline rank (the rank-floor invariant)."""
+    panel = _panel([_ich(0.9)])  # detector baseline is high (~0.9)
+    a = ClaudeAssessment(
+        priority_score=0.05, priority_band="routine",  # Claude wants it near the back
+        verification=[Verification(module_id="ich_v1", supported=False, reasoning="partial volume")],
+        summary="likely artifact", abstain=False, source="claude",
+    )
+    d = decide(panel, a)
+    assert d.action == "reorder"  # contradicted → not paged
+    # ...but floored at the detector baseline, NOT lowered to Claude's 0.05
+    assert d.priority_score >= 0.9 - 1e-9
+    assert any("rank floor" in line for line in d.audit)
+
+
+def test_claude_can_still_move_earlier():
+    """Claude raising priority above baseline is allowed (move earlier)."""
+    panel = _panel([_ich(0.1)])  # low detector baseline
+    a = ClaudeAssessment(
+        priority_score=0.6, priority_band="urgent",
+        verification=[], summary="context suggests urgency", abstain=False, source="claude",
+    )
+    d = decide(panel, a)
+    assert d.priority_score == 0.6  # not floored down; Claude moved it earlier
+
+
 def test_failed_module_is_surfaced_not_blocking():
     failed = ModuleResult(
         module_id="ich_v1", module_version="0.1.0",

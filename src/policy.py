@@ -18,7 +18,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
-from src.claude_layer import ClaudeAssessment
+from src.claude_layer import ClaudeAssessment, _band_from_score, detector_only_assessment
 from src.contract import ModuleResult, PanelOutput
 from src.logging_conf import get_logger
 
@@ -59,13 +59,25 @@ def decide(panel: PanelOutput, assessment: ClaudeAssessment) -> PolicyDecision:
     slog = log.bind(accession=panel.study.accession)
     candidates, trace = _page_candidates(panel, assessment)
 
+    # RANK FLOOR (invariant): Claude may only move a study EARLIER than its
+    # detector-only baseline, never later. So the effective reorder priority is
+    # floored at the detector-only score — a Claude down-weight can block a page
+    # but can never demote a study below where the panel alone would place it.
+    baseline = detector_only_assessment(panel).priority_score
+    floored = max(assessment.priority_score, baseline)
+    if floored > assessment.priority_score:
+        trace.append(
+            f"rank floor: claude={assessment.priority_score} < detector baseline={baseline} "
+            f"→ held at baseline (Claude may only move earlier)"
+        )
+
     if panel.modules_failed:
         trace.append(f"note: modules failed ({', '.join(panel.modules_failed)}) — surfaced, not blocking")
 
     if candidates:
         decision = PolicyDecision(
             action="page",
-            priority_score=max(assessment.priority_score, 0.75),  # a page is at least 'immediate'
+            priority_score=max(floored, 0.75),  # a page is at least 'immediate'
             priority_band="immediate",
             reason="page: "
             + "; ".join(f"{r.finding_class.value}={r.value}" for r in candidates),
@@ -73,10 +85,11 @@ def decide(panel: PanelOutput, assessment: ClaudeAssessment) -> PolicyDecision:
             audit=trace,
         )
     else:
+        band = assessment.priority_band if floored == assessment.priority_score else _band_from_score(floored)
         decision = PolicyDecision(
             action="reorder",
-            priority_score=assessment.priority_score,
-            priority_band=assessment.priority_band,
+            priority_score=floored,
+            priority_band=band,
             reason="reorder: no positive, management-changing, non-contradicted finding",
             paging_findings=[],
             audit=trace,

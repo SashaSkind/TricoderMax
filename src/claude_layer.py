@@ -36,6 +36,10 @@ class Verification(BaseModel):
     module_id: str
     supported: bool
     reasoning: str
+    # How much Claude adjusts confidence in this finding from context, in [-1, 1].
+    # Negative = down-weight (e.g. partial-volume artifact). Bounded by the rank
+    # floor: a negative adjustment can block a page but never demote below baseline.
+    confidence_adjustment: float = 0.0
 
 
 class ClaudeAssessment(BaseModel):
@@ -44,6 +48,7 @@ class ClaudeAssessment(BaseModel):
     priority_band: PriorityBand
     verification: list[Verification] = Field(default_factory=list)
     summary: str
+    prior_comparison: Optional[str] = None  # "New since 2026-03-14" | null (text RAG, when a prior exists)
     caveats: list[str] = Field(default_factory=list)
     abstain: bool = False
     source: Literal["claude", "fallback"] = "claude"
@@ -113,10 +118,12 @@ _SYSTEM = (
     "timing, prior report) and the provided candidate slice images SUPPORT or fail to "
     "support it — e.g. a high subdural probability whose heatmap sits over a skull-base "
     "partial-volume region in a young patient with no trauma history should be marked "
-    "unsupported. Down-weight unsupported findings; never fabricate findings the panel "
-    "did not report. If you are not confident, set abstain=true and the system will use "
-    "the detector-only ranking. Report the EXTERNAL calibration you are given; do not "
-    "invent numbers."
+    "unsupported. For each finding set confidence_adjustment in [-1,1] (negative = "
+    "down-weight); a down-weight can block a page but never demotes a study below its "
+    "detector-only rank. Never fabricate findings the panel did not report. If a prior "
+    "report is provided, set prior_comparison (e.g. 'new since <date>'). If you are not "
+    "confident, set abstain=true and the system will use the detector-only ranking. "
+    "Report the EXTERNAL calibration you are given; do not invent numbers."
 )
 
 
